@@ -39,12 +39,12 @@ function getTimePercentage(nextResetTime: number, unit: number): number {
 
 function getUsageColor(tokenPercent: number, timePercent?: number): string {
   if (typeof timePercent === 'number') {
-    if (tokenPercent > timePercent) return 'bg-red-500';
-    return 'bg-green-500';
+    if (tokenPercent > timePercent) return 'bg-red-400';
+    return 'bg-green-400';
   }
-  if (tokenPercent >= 90) return 'bg-red-500';
-  if (tokenPercent >= 70) return 'bg-yellow-500';
-  return 'bg-blue-500';
+  if (tokenPercent >= 90) return 'bg-red-400';
+  if (tokenPercent >= 70) return 'bg-yellow-400';
+  return 'bg-blue-400';
 }
 
 function getTypeLabel(type: string): string {
@@ -67,33 +67,33 @@ function LimitItem({ item }: { item: ZhipuLimitItem }) {
   return (
     <div className="mb-3 last:mb-0">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-sm font-medium text-gray-600">
+        <span className="text-sm font-medium text-white/80">
           {getLimitLabel(item)}
         </span>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-white/60">
           {item.percentage.toFixed(1)}%
         </span>
       </div>
-      <div className={`w-full bg-gray-200 rounded-full h-2 ${hasTimeBar ? 'mb-px' : 'mb-1'}`}>
+      <div className={`glass-progress-bg w-full h-2 ${hasTimeBar ? 'mb-px' : 'mb-1'}`}>
         <div
           className={`${getUsageColor(item.percentage, timePercentage)} h-2 rounded-full transition-all duration-300`}
           style={{ width: `${Math.min(item.percentage, 100)}%` }}
         />
       </div>
       {hasTimeBar && (
-        <div className="w-full bg-gray-200 rounded-full h-px mb-1">
+        <div className="glass-progress-bg w-full h-px mb-1">
           <div
-            className="bg-gray-400 h-px rounded-full transition-all duration-300"
+            className="bg-white/30 h-px rounded-full transition-all duration-300"
             style={{ width: `${timePercentage}%` }}
           />
         </div>
       )}
       <div className="flex justify-between items-center">
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-white/50">
           重置: {formatResetTime(item.nextResetTime)}
         </p>
         {item.type === 'TIME_LIMIT' && item.usage != null && (
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-white/40">
             {item.remaining}/{item.usage}
           </p>
         )}
@@ -105,9 +105,9 @@ function LimitItem({ item }: { item: ZhipuLimitItem }) {
 export function ZhipuCard({ data, error }: ZhipuCardProps) {
   if (!data) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-        <h2 className="text-lg font-bold text-gray-800 mb-2">🤖 智谱 AI</h2>
-        <p className="text-gray-500 text-sm">
+      <div className="glass-card p-4 mb-4">
+        <h2 className="text-lg font-bold text-white/90 mb-2">🤖 智谱 AI</h2>
+        <p className="text-white/50 text-sm">
           {error ? `数据获取失败: ${error}` : '未配置 API Key'}
         </p>
       </div>
@@ -115,11 +115,11 @@ export function ZhipuCard({ data, error }: ZhipuCardProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+    <div className="glass-card p-4 mb-4">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-800">🤖 智谱 AI</h2>
+        <h2 className="text-lg font-bold text-white/90">🤖 智谱 AI</h2>
         {data.level && (
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+          <span className="text-xs glass-badge px-2 py-0.5 rounded-full">
             {data.level}
           </span>
         )}

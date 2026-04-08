@@ -23,23 +23,6 @@ pub struct LimitInfo {
     pub reset_time: String,
 }
 
-// Kimi API 响应结构
-#[derive(Debug, Deserialize)]
-pub struct KimiBalanceResponse {
-    pub code: i32,
-    pub data: KimiData,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct KimiData {
-    #[serde(rename = "availableBalance")]
-    pub available_balance: f64,
-    #[serde(rename = "cashBalance")]
-    pub cash_balance: f64,
-    #[serde(rename = "voucherBalance")]
-    pub voucher_balance: f64,
-}
-
 // 统一返回给前端的数据结构
 #[derive(Debug, Serialize)]
 pub struct ZhipuQuotaResult {
@@ -52,24 +35,6 @@ pub struct QuotaInfo {
     pub used: u64,
     pub total: u64,
     pub remaining: f64,
-    pub reset_time: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct KimiQuotaResult {
-    pub rate_limit: RateLimitInfo,
-    pub weekly: WeeklyInfo,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RateLimitInfo {
-    pub usage_percent: f64,
-    pub reset_time: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WeeklyInfo {
-    pub usage_percent: f64,
     pub reset_time: String,
 }
 
@@ -118,52 +83,6 @@ pub async fn fetch_zhipu_quota(api_key: String) -> Result<ZhipuQuotaResult, Stri
             total: quota.data.weekly_limit.total,
             remaining: weekly_remaining,
             reset_time: quota.data.weekly_limit.reset_time,
-        },
-    })
-}
-
-// 获取 Kimi 额度
-#[tauri::command]
-pub async fn fetch_kimi_quota(api_key: String) -> Result<KimiQuotaResult, String> {
-    let client = reqwest::Client::new();
-
-    let response = client
-        .get("https://api.moonshot.ai/v1/users/me/balance")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-
-    let balance: KimiBalanceResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Parse failed: {}", e))?;
-
-    if balance.code != 0 {
-        return Err(format!("API error: code {}", balance.code));
-    }
-
-    // Kimi API 只返回余额，这里模拟频限和每周使用率
-    // 实际使用时需要根据具体业务逻辑调整
-    let usage_percent = if balance.data.available_balance > 0.0 {
-        ((balance.data.cash_balance / balance.data.available_balance) * 100.0).min(100.0)
-    } else {
-        100.0
-    };
-
-    // 计算下一个小时和本周的重置时间
-    let now = chrono::Local::now();
-    let next_hour = now + chrono::Duration::hours(1);
-    let next_week = now + chrono::Duration::days(7);
-
-    Ok(KimiQuotaResult {
-        rate_limit: RateLimitInfo {
-            usage_percent,
-            reset_time: next_hour.to_rfc3339(),
-        },
-        weekly: WeeklyInfo {
-            usage_percent: usage_percent * 0.7, // 模拟不同的使用率
-            reset_time: next_week.to_rfc3339(),
         },
     })
 }
