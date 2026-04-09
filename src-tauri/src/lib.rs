@@ -5,17 +5,17 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::new().build())
     .setup(|app| {
-      // 配置 macOS 毛玻璃效果 - 配置已在 tauri.conf.json 中设置
+      // 配置 macOS 毛玻璃效果和原生圆角
       #[cfg(target_os = "macos")]
       {
         use tauri::Manager;
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+
         let window = app.get_webview_window("main").unwrap();
-        // 启用窗口震动效果 (vibrancy) 实现毛玻璃
-        let _ = window.set_effects(tauri::window::EffectsBuilder::new()
-          .effect(tauri::window::Effect::HudWindow)
-          .state(tauri::window::EffectState::Active)
-          .build()
-        );
+
+        // 应用 macOS 毛玻璃效果
+        apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(20.0))
+          .expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
       }
 
       if cfg!(debug_assertions) {
