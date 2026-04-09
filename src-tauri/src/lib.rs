@@ -9,13 +9,17 @@ pub fn run() {
       #[cfg(target_os = "macos")]
       {
         use tauri::Manager;
-        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
         let window = app.get_webview_window("main").unwrap();
 
-        // 应用 macOS 毛玻璃效果
-        apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(20.0))
-          .expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
+        // 应用 macOS 毛玻璃效果，始终保持在活动状态（不随焦点变化）
+        apply_vibrancy(
+          &window,
+          NSVisualEffectMaterial::HudWindow,
+          Some(NSVisualEffectState::Active),
+          Some(20.0)
+        ).expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
       }
 
       if cfg!(debug_assertions) {

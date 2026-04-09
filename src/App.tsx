@@ -21,11 +21,6 @@ function App() {
 
         {/* 数据卡片 */}
         <ZhipuCard data={data.zhipu} error={data.zhipuError} />
-
-        {/* 说明 */}
-        <p className="text-xs text-white/40 mt-4 text-center">
-          数据每分钟自动刷新 | API Key 通过 .env.local 配置
-        </p>
       </main>
     </div>
   );
