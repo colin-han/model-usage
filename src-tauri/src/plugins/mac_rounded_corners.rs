@@ -104,38 +104,42 @@ pub fn enable_modern_window_style<R: Runtime>(
                 #[cfg(target_os = "macos")]
                 unsafe {
                     let ns_window = webview.ns_window() as id;
-                    
+
                     let mut style_mask = ns_window.styleMask();
-                    
+
                     style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
                     style_mask |= NSWindowStyleMask::NSTitledWindowMask;
                     style_mask |= NSWindowStyleMask::NSClosableWindowMask;
                     style_mask |= NSWindowStyleMask::NSMiniaturizableWindowMask;
                     style_mask |= NSWindowStyleMask::NSResizableWindowMask;
-                    
+
                     ns_window.setStyleMask_(style_mask);
                     ns_window.setTitlebarAppearsTransparent_(cocoa::base::YES);
                     ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleHidden);
                     ns_window.setHasShadow_(cocoa::base::YES);
                     ns_window.setOpaque_(cocoa::base::NO);
-                    
+
+                    // Enable layer for the window
+                    let _: () = msg_send![ns_window, setWantsLayer: cocoa::base::YES];
+
                     let content_view = ns_window.contentView();
                     content_view.setWantsLayer(cocoa::base::YES);
-                    
+
+                    // Apply rounded corners to content view
                     let layer: id = msg_send![content_view, layer];
                     if !layer.is_null() {
                         let _: () = msg_send![layer, setCornerRadius: radius];
                         let _: () = msg_send![layer, setMasksToBounds: cocoa::base::YES];
                     }
-                    
+
                     position_traffic_lights(ns_window, config.offset_x, config.offset_y);
                 }
             })
             .map_err(|e| e.to_string())?;
-        
+
         Ok(())
     }
-    
+
     #[cfg(not(target_os = "macos"))]
     {
         Ok(())

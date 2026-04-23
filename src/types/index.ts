@@ -18,10 +18,31 @@ export interface ZhipuQuotaData {
   level: string;
 }
 
+// Windsurf 配额信息
+export interface WindsurfQuotaInfo {
+  remainingPercent: number;
+  resetAtUnix: string | null;
+}
+
+// Windsurf Flex 积分（可选）
+export interface WindsurfFlexCredits {
+  available: number;
+}
+
+// Windsurf 配额数据
+export interface WindsurfQuotaData {
+  planName: string | null;
+  dailyQuota: WindsurfQuotaInfo;
+  weeklyQuota: WindsurfQuotaInfo;
+  flexCredits: WindsurfFlexCredits | null;
+}
+
 // 使用数据
 export interface UsageData {
   zhipu: ZhipuQuotaData | null;
+  windsurf: WindsurfQuotaData | null;
   lastUpdated: string | null;
   error: string | null;
   zhipuError: string | null;
+  windsurfError: string | null;
 }

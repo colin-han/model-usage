@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { UsageData, ZhipuQuotaData } from '../types';
+import { invoke } from '@tauri-apps/api/core';
+import type { UsageData, ZhipuQuotaData, WindsurfQuotaData } from '../types';
 
 const ZHIPU_API_KEY = import.meta.env.VITE_ZHIPU_API_KEY || '';
 
@@ -34,9 +35,11 @@ function parseZhipuResponse(json: Record<string, unknown>): ZhipuQuotaData {
 export function useUsageData() {
   const [data, setData] = useState<UsageData>({
     zhipu: null,
+    windsurf: null,
     lastUpdated: null,
     error: null,
     zhipuError: null,
+    windsurfError: null,
   });
   const [loading, setLoading] = useState(false);
 
@@ -47,12 +50,15 @@ export function useUsageData() {
     }
 
     setLoading(true);
-    setData(prev => ({ ...prev, error: null, zhipuError: null }));
+    setData(prev => ({ ...prev, error: null, zhipuError: null, windsurfError: null }));
 
     try {
       let zhipuData: ZhipuQuotaData | null = null;
       let zhipuError: string | null = null;
+      let windsurfData: WindsurfQuotaData | null = null;
+      let windsurfError: string | null = null;
 
+      // 获取智谱数据
       try {
         const resp = await fetch('https://bigmodel.cn/api/monitor/usage/quota/limit', {
           headers: { 'Authorization': `Bearer ${ZHIPU_API_KEY}` },
@@ -65,11 +71,27 @@ export function useUsageData() {
         zhipuError = err instanceof Error ? err.message : '获取智谱数据失败';
       }
 
+      // 获取 Windsurf 数据
+      try {
+        const apiKeyResult = await invoke<{ apiKey: string | null }>('get_windsurf_api_key');
+        if (apiKeyResult.apiKey) {
+          windsurfData = await invoke<WindsurfQuotaData>('fetch_windsurf_quota', {
+            apiKey: apiKeyResult.apiKey,
+          });
+        } else {
+          windsurfError = '未找到 Windsurf API Key，请确保已安装并登录 Windsurf';
+        }
+      } catch (err) {
+        windsurfError = err instanceof Error ? err.message : '获取 Windsurf 数据失败';
+      }
+
       setData({
         zhipu: zhipuData,
+        windsurf: windsurfData,
         lastUpdated: new Date().toISOString(),
         error: null,
         zhipuError,
+        windsurfError,
       });
     } catch (err) {
       setData(prev => ({

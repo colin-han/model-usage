@@ -33,6 +33,8 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       api::fetch_zhipu_quota,
+      api::get_windsurf_api_key,
+      api::fetch_windsurf_quota,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

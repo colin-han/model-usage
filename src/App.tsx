@@ -1,4 +1,5 @@
 import { ZhipuCard } from './components/ZhipuCard';
+import { WindsurfCard } from './components/WindsurfCard';
 import { TitleBar } from './components/TitleBar';
 import { useUsageData } from './hooks/useUsageData';
 
@@ -20,6 +21,7 @@ function App() {
         )}
 
         {/* 数据卡片 */}
+        <WindsurfCard data={data.windsurf} error={data.windsurfError} />
         <ZhipuCard data={data.zhipu} error={data.zhipuError} />
       </main>
     </div>
