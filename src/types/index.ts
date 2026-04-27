@@ -37,12 +37,43 @@ export interface WindsurfQuotaData {
   flexCredits: WindsurfFlexCredits | null;
 }
 
+// DeepSeek 余额信息
+export interface DeepSeekBalanceInfo {
+  currency: string;
+  total_balance: string;
+  granted_balance: string;
+  topped_up_balance: string;
+}
+
+// DeepSeek 余额响应
+export interface DeepSeekBalanceData {
+  balance_infos: DeepSeekBalanceInfo[];
+}
+
+// DeepSeek 用量记录
+export interface DeepSeekUsageRecord {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_in_cents: number;
+  model: string;
+}
+
+// DeepSeek 用量数据
+export interface DeepSeekUsageData {
+  balance: DeepSeekBalanceData | null;
+  todayCost: number;
+  weekCost: number;
+}
+
 // 使用数据
 export interface UsageData {
   zhipu: ZhipuQuotaData | null;
   windsurf: WindsurfQuotaData | null;
+  deepseek: DeepSeekUsageData | null;
   lastUpdated: string | null;
   error: string | null;
   zhipuError: string | null;
   windsurfError: string | null;
+  deepseekError: string | null;
 }

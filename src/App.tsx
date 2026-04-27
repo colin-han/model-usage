@@ -1,5 +1,6 @@
 import { ZhipuCard } from './components/ZhipuCard';
 import { WindsurfCard } from './components/WindsurfCard';
+import { DeepSeekCard } from './components/DeepSeekCard';
 import { TitleBar } from './components/TitleBar';
 import { useUsageData } from './hooks/useUsageData';
 
@@ -22,6 +23,7 @@ function App() {
 
         {/* 数据卡片 */}
         <WindsurfCard data={data.windsurf} error={data.windsurfError} />
+        <DeepSeekCard data={data.deepseek} error={data.deepseekError} />
         <ZhipuCard data={data.zhipu} error={data.zhipuError} />
       </main>
     </div>

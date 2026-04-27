@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { UsageData, ZhipuQuotaData, WindsurfQuotaData } from '../types';
+import type { UsageData, ZhipuQuotaData, WindsurfQuotaData, DeepSeekUsageData, DeepSeekBalanceData, DeepSeekUsageRecord } from '../types';
 
 const ZHIPU_API_KEY = import.meta.env.VITE_ZHIPU_API_KEY || '';
+const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
 
 // 智谱 unit 枚举：3=五小时, 5=月, 6=周
 const UNIT_LABELS: Record<number, string> = {
@@ -32,46 +33,91 @@ function parseZhipuResponse(json: Record<string, unknown>): ZhipuQuotaData {
   };
 }
 
+// 获取日期字符串 (YYYY-MM-DD)
+function getDateStr(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+async function fetchDeepSeekData(): Promise<DeepSeekUsageData> {
+  const headers = {
+    'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+    'Accept': 'application/json',
+  };
+
+  // 并行查询余额和用量
+  const [balanceResp, todayResp, weekResp] = await Promise.all([
+    fetch('https://api.deepseek.com/user/balance', { headers }),
+    fetch(`https://api.deepseek.com/v1/usage?start_date=${getDateStr(new Date())}&end_date=${getDateStr(new Date())}`, { headers }),
+    fetch(`https://api.deepseek.com/v1/usage?start_date=${getDateStr(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000))}&end_date=${getDateStr(new Date())}`, { headers }),
+  ]);
+
+  let balance: DeepSeekBalanceData | null = null;
+  let todayCost = 0;
+  let weekCost = 0;
+
+  if (balanceResp.ok) {
+    balance = await balanceResp.json() as DeepSeekBalanceData;
+  }
+
+  if (todayResp.ok) {
+    const todayData = await todayResp.json() as { data: DeepSeekUsageRecord[] };
+    todayCost = (todayData.data || []).reduce((sum, r) => sum + (r.cost_in_cents || 0), 0) / 100;
+  }
+
+  if (weekResp.ok) {
+    const weekData = await weekResp.json() as { data: DeepSeekUsageRecord[] };
+    weekCost = (weekData.data || []).reduce((sum, r) => sum + (r.cost_in_cents || 0), 0) / 100;
+  }
+
+  return { balance, todayCost, weekCost };
+}
+
 export function useUsageData() {
   const [data, setData] = useState<UsageData>({
     zhipu: null,
     windsurf: null,
+    deepseek: null,
     lastUpdated: null,
     error: null,
     zhipuError: null,
     windsurfError: null,
+    deepseekError: null,
   });
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!ZHIPU_API_KEY) {
-      setData(prev => ({ ...prev, error: '请在 .env.local 中配置 VITE_ZHIPU_API_KEY（参考 .env.local.example）' }));
+    if (!ZHIPU_API_KEY && !DEEPSEEK_API_KEY) {
+      setData(prev => ({ ...prev, error: '请在 .env.local 中配置 API Key（参考 .env.local.example）' }));
       return;
     }
 
     setLoading(true);
-    setData(prev => ({ ...prev, error: null, zhipuError: null, windsurfError: null }));
+    setData(prev => ({ ...prev, error: null, zhipuError: null, windsurfError: null, deepseekError: null }));
 
     try {
       let zhipuData: ZhipuQuotaData | null = null;
       let zhipuError: string | null = null;
       let windsurfData: WindsurfQuotaData | null = null;
       let windsurfError: string | null = null;
+      let deepseekData: DeepSeekUsageData | null = null;
+      let deepseekError: string | null = null;
 
       // 获取智谱数据
-      try {
-        const resp = await fetch('https://bigmodel.cn/api/monitor/usage/quota/limit', {
-          headers: { 'Authorization': `Bearer ${ZHIPU_API_KEY}` },
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const json = await resp.json();
-        if (!json.success) throw new Error(`API 错误: ${json.msg || json.code}`);
-        zhipuData = parseZhipuResponse(json);
-      } catch (err) {
-        zhipuError = err instanceof Error ? err.message : '获取智谱数据失败';
+      if (ZHIPU_API_KEY) {
+        try {
+          const resp = await fetch('https://bigmodel.cn/api/monitor/usage/quota/limit', {
+            headers: { 'Authorization': `Bearer ${ZHIPU_API_KEY}` },
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const json = await resp.json();
+          if (!json.success) throw new Error(`API 错误: ${json.msg || json.code}`);
+          zhipuData = parseZhipuResponse(json);
+        } catch (err) {
+          zhipuError = err instanceof Error ? err.message : '获取智谱数据失败';
+        }
       }
 
-      // 获取 Windsurf 数据
+      // 获取 Windsurf 数据（后端 Rust 命令）
       try {
         const apiKeyResult = await invoke<{ apiKey: string | null }>('get_windsurf_api_key');
         if (apiKeyResult.apiKey) {
@@ -85,13 +131,24 @@ export function useUsageData() {
         windsurfError = err instanceof Error ? err.message : '获取 Windsurf 数据失败';
       }
 
+      // 获取 DeepSeek 数据
+      if (DEEPSEEK_API_KEY) {
+        try {
+          deepseekData = await fetchDeepSeekData();
+        } catch (err) {
+          deepseekError = err instanceof Error ? err.message : '获取 DeepSeek 数据失败';
+        }
+      }
+
       setData({
         zhipu: zhipuData,
         windsurf: windsurfData,
+        deepseek: deepseekData,
         lastUpdated: new Date().toISOString(),
         error: null,
         zhipuError,
         windsurfError,
+        deepseekError,
       });
     } catch (err) {
       setData(prev => ({
