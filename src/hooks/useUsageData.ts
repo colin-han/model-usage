@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { UsageData, ZhipuQuotaData, WindsurfQuotaData, DeepSeekUsageData, DeepSeekBalanceData, DeepSeekUsageRecord } from '../types';
+import type { UsageData, ZhipuQuotaData, WindsurfQuotaData, DeepSeekUsageData, DeepSeekBalanceData } from '../types';
 
 const ZHIPU_API_KEY = import.meta.env.VITE_ZHIPU_API_KEY || '';
 const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
@@ -33,43 +33,20 @@ function parseZhipuResponse(json: Record<string, unknown>): ZhipuQuotaData {
   };
 }
 
-// 获取日期字符串 (YYYY-MM-DD)
-function getDateStr(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 async function fetchDeepSeekData(): Promise<DeepSeekUsageData> {
   const headers = {
     'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
     'Accept': 'application/json',
   };
 
-  // 并行查询余额和用量
-  const [balanceResp, todayResp, weekResp] = await Promise.all([
-    fetch('https://api.deepseek.com/user/balance', { headers }),
-    fetch(`https://api.deepseek.com/v1/usage?start_date=${getDateStr(new Date())}&end_date=${getDateStr(new Date())}`, { headers }),
-    fetch(`https://api.deepseek.com/v1/usage?start_date=${getDateStr(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000))}&end_date=${getDateStr(new Date())}`, { headers }),
-  ]);
+  const resp = await fetch('https://api.deepseek.com/user/balance', { headers });
 
-  let balance: DeepSeekBalanceData | null = null;
-  let todayCost = 0;
-  let weekCost = 0;
-
-  if (balanceResp.ok) {
-    balance = await balanceResp.json() as DeepSeekBalanceData;
+  if (!resp.ok) {
+    throw new Error(`余额查询失败: HTTP ${resp.status}`);
   }
+  const balance = await resp.json() as DeepSeekBalanceData;
 
-  if (todayResp.ok) {
-    const todayData = await todayResp.json() as { data: DeepSeekUsageRecord[] };
-    todayCost = (todayData.data || []).reduce((sum, r) => sum + (r.cost_in_cents || 0), 0) / 100;
-  }
-
-  if (weekResp.ok) {
-    const weekData = await weekResp.json() as { data: DeepSeekUsageRecord[] };
-    weekCost = (weekData.data || []).reduce((sum, r) => sum + (r.cost_in_cents || 0), 0) / 100;
-  }
-
-  return { balance, todayCost, weekCost };
+  return { balance };
 }
 
 export function useUsageData() {

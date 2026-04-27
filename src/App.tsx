@@ -22,9 +22,9 @@ function App() {
         )}
 
         {/* 数据卡片 */}
+        <ZhipuCard data={data.zhipu} error={data.zhipuError} />
         <WindsurfCard data={data.windsurf} error={data.windsurfError} />
         <DeepSeekCard data={data.deepseek} error={data.deepseekError} />
-        <ZhipuCard data={data.zhipu} error={data.zhipuError} />
       </main>
     </div>
   );

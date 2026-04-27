@@ -50,20 +50,9 @@ export interface DeepSeekBalanceData {
   balance_infos: DeepSeekBalanceInfo[];
 }
 
-// DeepSeek 用量记录
-export interface DeepSeekUsageRecord {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  cost_in_cents: number;
-  model: string;
-}
-
 // DeepSeek 用量数据
 export interface DeepSeekUsageData {
   balance: DeepSeekBalanceData | null;
-  todayCost: number;
-  weekCost: number;
 }
 
 // 使用数据
