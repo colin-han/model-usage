@@ -99,7 +99,7 @@ export function useUsageData() {
         const apiKeyResult = await invoke<{ apiKey: string | null }>('get_windsurf_api_key');
         if (apiKeyResult.apiKey) {
           windsurfData = await invoke<WindsurfQuotaData>('fetch_windsurf_quota', {
-            api_key: apiKeyResult.apiKey,
+            apiKey: apiKeyResult.apiKey,
           });
         } else {
           windsurfError = '未找到 Windsurf API Key，请确保已安装并登录 Windsurf';
