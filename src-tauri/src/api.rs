@@ -154,12 +154,12 @@ pub fn get_windsurf_api_key() -> Result<WindsurfApiKeyResult, String> {
 
 // 获取 Windsurf 配额
 #[tauri::command]
-pub async fn fetch_windsurf_quota(apiKey: String) -> Result<WindsurfQuotaResult, String> {
+pub async fn fetch_windsurf_quota(api_key: String) -> Result<WindsurfQuotaResult, String> {
     let client = reqwest::Client::new();
 
     let request_body = WindsurfRequest {
         metadata: WindsurfMetadata {
-            api_key: apiKey,
+            api_key: api_key,
             ide_name: "windsurf".to_string(),
             ide_version: "0.0.0".to_string(),
             extension_name: "windsurf".to_string(),
