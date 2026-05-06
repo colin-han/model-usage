@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { UsageData, ZhipuQuotaData, WindsurfQuotaData, DeepSeekUsageData, DeepSeekBalanceData } from '../types';
+import type { UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, ClaudeCodeUsageData } from '../types';
 
 const ZHIPU_API_KEY = import.meta.env.VITE_ZHIPU_API_KEY || '';
 const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
@@ -52,32 +52,29 @@ async function fetchDeepSeekData(): Promise<DeepSeekUsageData> {
 export function useUsageData() {
   const [data, setData] = useState<UsageData>({
     zhipu: null,
-    windsurf: null,
     deepseek: null,
+    claudeCode: null,
     lastUpdated: null,
     error: null,
     zhipuError: null,
-    windsurfError: null,
     deepseekError: null,
+    claudeCodeError: null,
   });
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!ZHIPU_API_KEY && !DEEPSEEK_API_KEY) {
-      setData(prev => ({ ...prev, error: '请在 .env.local 中配置 API Key（参考 .env.local.example）' }));
-      return;
-    }
+    // 即使未配置 API Key，仍然尝试拉取 Windsurf / Claude Code 本地数据
 
     setLoading(true);
-    setData(prev => ({ ...prev, error: null, zhipuError: null, windsurfError: null, deepseekError: null }));
+    setData(prev => ({ ...prev, error: null, zhipuError: null, deepseekError: null, claudeCodeError: null }));
 
     try {
       let zhipuData: ZhipuQuotaData | null = null;
       let zhipuError: string | null = null;
-      let windsurfData: WindsurfQuotaData | null = null;
-      let windsurfError: string | null = null;
       let deepseekData: DeepSeekUsageData | null = null;
       let deepseekError: string | null = null;
+      let claudeCodeData: ClaudeCodeUsageData | null = null;
+      let claudeCodeError: string | null = null;
 
       // 获取智谱数据
       if (ZHIPU_API_KEY) {
@@ -94,20 +91,6 @@ export function useUsageData() {
         }
       }
 
-      // 获取 Windsurf 数据（后端 Rust 命令）
-      try {
-        const apiKeyResult = await invoke<{ apiKey: string | null }>('get_windsurf_api_key');
-        if (apiKeyResult.apiKey) {
-          windsurfData = await invoke<WindsurfQuotaData>('fetch_windsurf_quota', {
-            apiKey: apiKeyResult.apiKey,
-          });
-        } else {
-          windsurfError = '未找到 Windsurf API Key，请确保已安装并登录 Windsurf';
-        }
-      } catch (err) {
-        windsurfError = err instanceof Error ? err.message : '获取 Windsurf 数据失败';
-      }
-
       // 获取 DeepSeek 数据
       if (DEEPSEEK_API_KEY) {
         try {
@@ -117,15 +100,28 @@ export function useUsageData() {
         }
       }
 
+      // 获取 Claude Code 用量
+      try {
+        claudeCodeData = await invoke<ClaudeCodeUsageData>('fetch_claude_code_usage');
+      } catch (err) {
+        if (typeof err === 'string') {
+          claudeCodeError = err;
+        } else if (err instanceof Error) {
+          claudeCodeError = err.message;
+        } else {
+          claudeCodeError = JSON.stringify(err);
+        }
+      }
+
       setData({
         zhipu: zhipuData,
-        windsurf: windsurfData,
         deepseek: deepseekData,
+        claudeCode: claudeCodeData,
         lastUpdated: new Date().toISOString(),
         error: null,
         zhipuError,
-        windsurfError,
         deepseekError,
+        claudeCodeError,
       });
     } catch (err) {
       setData(prev => ({

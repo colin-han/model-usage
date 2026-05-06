@@ -18,25 +18,6 @@ export interface ZhipuQuotaData {
   level: string;
 }
 
-// Windsurf 配额信息
-export interface WindsurfQuotaInfo {
-  remainingPercent: number;
-  resetAtUnix: string | null;
-}
-
-// Windsurf Flex 积分（可选）
-export interface WindsurfFlexCredits {
-  available: number;
-}
-
-// Windsurf 配额数据
-export interface WindsurfQuotaData {
-  planName: string | null;
-  dailyQuota: WindsurfQuotaInfo;
-  weeklyQuota: WindsurfQuotaInfo;
-  flexCredits: WindsurfFlexCredits | null;
-}
-
 // DeepSeek 余额信息
 export interface DeepSeekBalanceInfo {
   currency: string;
@@ -55,14 +36,38 @@ export interface DeepSeekUsageData {
   balance: DeepSeekBalanceData | null;
 }
 
+// Claude Code 订阅用量窗口（来自 /api/oauth/usage）
+export interface ClaudeCodeUsageWindow {
+  utilization: number;       // 已使用百分比 (0-100)
+  resets_at: string | null;  // ISO8601 时间戳
+}
+
+// Claude Code 额外（按量付费）用量
+export interface ClaudeCodeExtraUsage {
+  is_enabled: boolean;
+  monthly_limit: number | null;
+  used_credits: number | null;
+  utilization: number | null;
+  currency: string | null;
+}
+
+// Claude Code 用量数据
+export interface ClaudeCodeUsageData {
+  fiveHour: ClaudeCodeUsageWindow | null;
+  sevenDay: ClaudeCodeUsageWindow | null;
+  sevenDayOpus: ClaudeCodeUsageWindow | null;
+  sevenDaySonnet: ClaudeCodeUsageWindow | null;
+  extraUsage: ClaudeCodeExtraUsage | null;
+}
+
 // 使用数据
 export interface UsageData {
   zhipu: ZhipuQuotaData | null;
-  windsurf: WindsurfQuotaData | null;
   deepseek: DeepSeekUsageData | null;
+  claudeCode: ClaudeCodeUsageData | null;
   lastUpdated: string | null;
   error: string | null;
   zhipuError: string | null;
-  windsurfError: string | null;
   deepseekError: string | null;
+  claudeCodeError: string | null;
 }

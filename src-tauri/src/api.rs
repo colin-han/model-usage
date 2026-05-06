@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use rusqlite::Connection;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
 
 // 智谱 API 响应结构
 #[derive(Debug, Deserialize)]
@@ -39,177 +41,147 @@ pub struct QuotaInfo {
     pub reset_time: String,
 }
 
-// Windsurf API 结构
-#[derive(Debug, Serialize)]
-pub struct WindsurfApiKeyResult {
-    #[serde(rename = "apiKey")]
-    pub api_key: Option<String>,
+// ===== Claude Code 订阅用量（调用官方 /api/oauth/usage） =====
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ClaudeOauthWindow {
+    pub utilization: f64,
+    pub resets_at: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WindsurfMetadata {
-    pub api_key: String,
-    pub ide_name: String,
-    #[serde(rename = "ideVersion")]
-    pub ide_version: String,
-    #[serde(rename = "extensionName")]
-    pub extension_name: String,
-    #[serde(rename = "extensionVersion")]
-    pub extension_version: String,
-    pub locale: String,
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct ClaudeExtraUsage {
+    #[serde(default)]
+    pub is_enabled: bool,
+    #[serde(default)]
+    pub monthly_limit: Option<f64>,
+    #[serde(default)]
+    pub used_credits: Option<f64>,
+    #[serde(default)]
+    pub utilization: Option<f64>,
+    #[serde(default)]
+    pub currency: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct WindsurfRequest {
-    pub metadata: WindsurfMetadata,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct WindsurfPlanInfo {
-    #[serde(rename = "planName")]
-    pub plan_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct WindsurfPlanStatus {
-    #[serde(rename = "planInfo")]
-    pub plan_info: WindsurfPlanInfo,
-    #[serde(rename = "availableFlexCredits")]
-    pub available_flex_credits: Option<i64>,
-    #[serde(rename = "dailyQuotaRemainingPercent")]
-    pub daily_quota_remaining_percent: Option<f64>,
-    #[serde(rename = "weeklyQuotaRemainingPercent")]
-    pub weekly_quota_remaining_percent: Option<f64>,
-    #[serde(rename = "dailyQuotaResetAtUnix")]
-    pub daily_quota_reset_at_unix: Option<String>,
-    #[serde(rename = "weeklyQuotaResetAtUnix")]
-    pub weekly_quota_reset_at_unix: Option<String>,
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ClaudeCodeUsageResult {
+    #[serde(rename = "fiveHour")]
+    pub five_hour: Option<ClaudeOauthWindow>,
+    #[serde(rename = "sevenDay")]
+    pub seven_day: Option<ClaudeOauthWindow>,
+    #[serde(rename = "sevenDayOpus")]
+    pub seven_day_opus: Option<ClaudeOauthWindow>,
+    #[serde(rename = "sevenDaySonnet")]
+    pub seven_day_sonnet: Option<ClaudeOauthWindow>,
+    #[serde(rename = "extraUsage")]
+    pub extra_usage: Option<ClaudeExtraUsage>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct WindsurfUserStatus {
-    #[serde(rename = "planStatus")]
-    pub plan_status: WindsurfPlanStatus,
+struct ClaudeOauthRaw {
+    five_hour: Option<ClaudeOauthWindow>,
+    seven_day: Option<ClaudeOauthWindow>,
+    seven_day_opus: Option<ClaudeOauthWindow>,
+    seven_day_sonnet: Option<ClaudeOauthWindow>,
+    extra_usage: Option<ClaudeExtraUsage>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct WindsurfResponse {
-    #[serde(rename = "userStatus")]
-    pub user_status: WindsurfUserStatus,
+struct CredentialsFile {
+    #[serde(rename = "claudeAiOauth")]
+    claude_ai_oauth: Option<ClaudeOauthCreds>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct WindsurfQuotaResult {
-    #[serde(rename = "planName")]
-    pub plan_name: Option<String>,
-    #[serde(rename = "dailyQuota")]
-    pub daily_quota: WindsurfQuotaInfo,
-    #[serde(rename = "weeklyQuota")]
-    pub weekly_quota: WindsurfQuotaInfo,
-    #[serde(rename = "flexCredits")]
-    pub flex_credits: Option<CreditInfo>,
+#[derive(Debug, Deserialize)]
+struct ClaudeOauthCreds {
+    #[serde(rename = "accessToken")]
+    access_token: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct WindsurfQuotaInfo {
-    #[serde(rename = "remainingPercent")]
-    pub remaining_percent: f64,
-    #[serde(rename = "resetAtUnix")]
-    pub reset_at_unix: Option<String>,
+fn parse_token_from_json(raw: &str) -> Result<String, String> {
+    let creds: CredentialsFile = serde_json::from_str(raw)
+        .map_err(|e| format!("解析凭证 JSON 失败: {}", e))?;
+    creds
+        .claude_ai_oauth
+        .and_then(|c| c.access_token)
+        .ok_or_else(|| "凭证中未找到 accessToken".to_string())
 }
 
-#[derive(Debug, Serialize)]
-pub struct CreditInfo {
-    pub available: i64,
-}
-
-// 从 Windsurf SQLite 数据库读取 API Key
-#[tauri::command]
-pub fn get_windsurf_api_key() -> Result<WindsurfApiKeyResult, String> {
-    let home_dir = std::env::var("HOME")
-        .map_err(|_| "Failed to get HOME directory".to_string())?;
-
-    let db_path = format!("{}/Library/Application Support/Windsurf/User/globalStorage/state.vscdb", home_dir);
-
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
-
-    let mut stmt = conn
-        .prepare("SELECT value FROM ItemTable WHERE key = 'windsurfAuthStatus'")
-        .map_err(|e| format!("Failed to prepare query: {}", e))?;
-
-    let api_key = stmt.query_row([], |row| {
-        let value: String = row.get(0)?;
-        Ok(value)
-    })
-    .ok()
-    .and_then(|json_str: String| {
-        serde_json::from_str::<serde_json::Value>(&json_str)
-            .ok()
-            .and_then(|v| v.get("apiKey")?.as_str().map(String::from))
-    });
-
-    Ok(WindsurfApiKeyResult { api_key })
-}
-
-// 获取 Windsurf 配额
-#[tauri::command]
-pub async fn fetch_windsurf_quota(api_key: String) -> Result<WindsurfQuotaResult, String> {
-    let client = reqwest::Client::new();
-
-    let request_body = WindsurfRequest {
-        metadata: WindsurfMetadata {
-            api_key: api_key,
-            ide_name: "windsurf".to_string(),
-            ide_version: "0.0.0".to_string(),
-            extension_name: "windsurf".to_string(),
-            extension_version: "0.0.0".to_string(),
-            locale: "en".to_string(),
-        },
-    };
-
-    let response = client
-        .post("https://server.codeium.com/exa.seat_management_pb.SeatManagementService/GetUserStatus")
-        .header("Content-Type", "application/json")
-        .header("Connect-Protocol-Version", "1")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
+fn read_oauth_token() -> Result<String, String> {
+    // 优先从 macOS Keychain 读取
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("security")
+            .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !raw.is_empty() {
+                    return parse_token_from_json(&raw);
+                }
+            }
+            Ok(out) => {
+                // 回退之前先记录 keychain 失败原因
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                let home_dir = std::env::var("HOME").unwrap_or_default();
+                let path = PathBuf::from(&home_dir).join(".claude/.credentials.json");
+                if !path.exists() {
+                    return Err(format!(
+                        "无法访问 macOS Keychain 中的 Claude Code 凭证：{}。请打开『钥匙串访问』搜索 \"Claude Code-credentials\"，将访问权限授予本应用，或在终端运行 claude 重新登录。",
+                        if stderr.is_empty() { "权限被拒绝".to_string() } else { stderr }
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(format!("调用 security 命令失败: {}", e));
+            }
+        }
     }
 
-    let windsurf_response: WindsurfResponse = response
+    // 回退到 ~/.claude/.credentials.json
+    let home_dir = std::env::var("HOME")
+        .map_err(|_| "无法获取 HOME 目录".to_string())?;
+    let path = PathBuf::from(&home_dir).join(".claude/.credentials.json");
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("未找到 Claude Code 登录凭证（路径：{}）：{}", path.display(), e))?;
+    parse_token_from_json(&raw)
+}
+
+#[tauri::command]
+pub async fn fetch_claude_code_usage() -> Result<ClaudeCodeUsageResult, String> {
+    let token = read_oauth_token()?;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.anthropic.com/api/oauth/usage")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("anthropic-beta", "oauth-2025-04-20")
+        .header("Content-Type", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("请求 /api/oauth/usage 失败: {}", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        if status.as_u16() == 401 {
+            return Err("OAuth token 已过期，请在终端运行 claude 重新登录".to_string());
+        }
+        return Err(format!("API 返回 {}: {}", status, body));
+    }
+
+    let raw: ClaudeOauthRaw = response
         .json()
         .await
-        .map_err(|e| format!("Parse failed: {}", e))?;
+        .map_err(|e| format!("解析响应失败: {}", e))?;
 
-    let ps = windsurf_response.user_status.plan_status;
-
-    // Daily quota (remaining percent)
-    let daily_remaining = ps.daily_quota_remaining_percent.unwrap_or(0.0);
-
-    // Weekly quota
-    let weekly_remaining = ps.weekly_quota_remaining_percent.unwrap_or(0.0);
-
-    // Flex credits (optional, may not exist for all plans)
-    let flex_credits = ps.available_flex_credits.map(|available| CreditInfo {
-        available,
-    });
-
-    Ok(WindsurfQuotaResult {
-        plan_name: ps.plan_info.plan_name,
-        daily_quota: WindsurfQuotaInfo {
-            remaining_percent: daily_remaining,
-            reset_at_unix: ps.daily_quota_reset_at_unix,
-        },
-        weekly_quota: WindsurfQuotaInfo {
-            remaining_percent: weekly_remaining,
-            reset_at_unix: ps.weekly_quota_reset_at_unix,
-        },
-        flex_credits,
+    Ok(ClaudeCodeUsageResult {
+        five_hour: raw.five_hour,
+        seven_day: raw.seven_day,
+        seven_day_opus: raw.seven_day_opus,
+        seven_day_sonnet: raw.seven_day_sonnet,
+        extra_usage: raw.extra_usage,
     })
 }
 
