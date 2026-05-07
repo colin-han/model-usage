@@ -3,6 +3,59 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+// ===== 应用设置（保存到 ~/.config/model-usage/setting.json） =====
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AppSettings {
+    #[serde(rename = "zhipuApiKey", default)]
+    pub zhipu_api_key: String,
+    #[serde(rename = "deepseekApiKey", default)]
+    pub deepseek_api_key: String,
+    #[serde(rename = "refreshIntervalSec", default = "default_refresh_interval")]
+    pub refresh_interval_sec: u64,
+}
+
+fn default_refresh_interval() -> u64 {
+    120
+}
+
+fn settings_path() -> Result<PathBuf, String> {
+    let home_dir = std::env::var("HOME").map_err(|_| "无法获取 HOME 目录".to_string())?;
+    Ok(PathBuf::from(home_dir).join(".config/model-usage/setting.json"))
+}
+
+#[tauri::command]
+pub fn load_settings() -> Result<AppSettings, String> {
+    let path = settings_path()?;
+    if !path.exists() {
+        return Ok(AppSettings {
+            refresh_interval_sec: default_refresh_interval(),
+            ..Default::default()
+        });
+    }
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("读取设置文件失败 ({}): {}", path.display(), e))?;
+    let mut settings: AppSettings = serde_json::from_str(&raw)
+        .map_err(|e| format!("解析设置文件失败: {}", e))?;
+    if settings.refresh_interval_sec == 0 {
+        settings.refresh_interval_sec = default_refresh_interval();
+    }
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn save_settings(settings: AppSettings) -> Result<(), String> {
+    let path = settings_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("创建目录失败 ({}): {}", parent.display(), e))?;
+    }
+    let raw = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("序列化设置失败: {}", e))?;
+    fs::write(&path, raw).map_err(|e| format!("写入设置失败 ({}): {}", path.display(), e))?;
+    Ok(())
+}
+
 // 智谱 API 响应结构
 #[derive(Debug, Deserialize)]
 pub struct ZhipuQuotaResponse {

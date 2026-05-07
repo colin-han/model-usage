@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, ClaudeCodeUsageData } from '../types';
-
-const ZHIPU_API_KEY = import.meta.env.VITE_ZHIPU_API_KEY || '';
-const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, ClaudeCodeUsageData } from '../types';
 
 // 智谱 unit 枚举：3=五小时, 5=月, 6=周
 const UNIT_LABELS: Record<number, string> = {
@@ -33,13 +30,13 @@ function parseZhipuResponse(json: Record<string, unknown>): ZhipuQuotaData {
   };
 }
 
-async function fetchDeepSeekData(): Promise<DeepSeekUsageData> {
-  const headers = {
-    'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-    'Accept': 'application/json',
-  };
-
-  const resp = await fetch('https://api.deepseek.com/user/balance', { headers });
+async function fetchDeepSeekData(apiKey: string): Promise<DeepSeekUsageData> {
+  const resp = await fetch('https://api.deepseek.com/user/balance', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'application/json',
+    },
+  });
 
   if (!resp.ok) {
     throw new Error(`余额查询失败: HTTP ${resp.status}`);
@@ -49,7 +46,7 @@ async function fetchDeepSeekData(): Promise<DeepSeekUsageData> {
   return { balance };
 }
 
-export function useUsageData() {
+export function useUsageData(settings: AppSettings, enabled: boolean) {
   const [data, setData] = useState<UsageData>({
     zhipu: null,
     deepseek: null,
@@ -77,10 +74,10 @@ export function useUsageData() {
       let claudeCodeError: string | null = null;
 
       // 获取智谱数据
-      if (ZHIPU_API_KEY) {
+      if (settings.zhipuApiKey) {
         try {
           const resp = await fetch('https://bigmodel.cn/api/monitor/usage/quota/limit', {
-            headers: { 'Authorization': `Bearer ${ZHIPU_API_KEY}` },
+            headers: { 'Authorization': `Bearer ${settings.zhipuApiKey}` },
           });
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const json = await resp.json();
@@ -92,9 +89,9 @@ export function useUsageData() {
       }
 
       // 获取 DeepSeek 数据
-      if (DEEPSEEK_API_KEY) {
+      if (settings.deepseekApiKey) {
         try {
-          deepseekData = await fetchDeepSeekData();
+          deepseekData = await fetchDeepSeekData(settings.deepseekApiKey);
         } catch (err) {
           deepseekError = err instanceof Error ? err.message : '获取 DeepSeek 数据失败';
         }
@@ -131,13 +128,15 @@ export function useUsageData() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [settings.zhipuApiKey, settings.deepseekApiKey]);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const intervalMs = Math.max(30, settings.refreshIntervalSec) * 1000;
+    const interval = setInterval(fetchData, intervalMs);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, enabled, settings.refreshIntervalSec]);
 
   return { data, loading, refresh: fetchData };
 }

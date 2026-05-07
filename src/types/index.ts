@@ -60,6 +60,13 @@ export interface ClaudeCodeUsageData {
   extraUsage: ClaudeCodeExtraUsage | null;
 }
 
+// 应用设置
+export interface AppSettings {
+  zhipuApiKey: string;
+  deepseekApiKey: string;
+  refreshIntervalSec: number;
+}
+
 // 使用数据
 export interface UsageData {
   zhipu: ZhipuQuotaData | null;
