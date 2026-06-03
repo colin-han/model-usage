@@ -123,9 +123,19 @@ export function ClaudeCodeCard({ data, error }: ClaudeCodeCardProps) {
     <div className="glass-card p-4 mb-4">
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-lg font-bold text-white/90">🤖 Claude Code</h2>
-        {data.extraUsage?.is_enabled && (
-          <span className="text-xs glass-badge px-2 py-0.5 rounded-full">已启用按量付费</span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {data.viaProxy && (
+            <span
+              className="text-[11px] glass-badge px-2 py-0.5 rounded-full text-amber-200 border border-amber-300/30"
+              title={data.proxyUrl ? `经由代理: ${data.proxyUrl}` : '经由代理访问'}
+            >
+              🛰 代理
+            </span>
+          )}
+          {data.extraUsage?.is_enabled && (
+            <span className="text-xs glass-badge px-2 py-0.5 rounded-full">已启用按量付费</span>
+          )}
+        </div>
       </div>
 
       {visible.length === 0 ? (

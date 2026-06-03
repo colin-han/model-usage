@@ -58,6 +58,8 @@ export interface ClaudeCodeUsageData {
   sevenDayOpus: ClaudeCodeUsageWindow | null;
   sevenDaySonnet: ClaudeCodeUsageWindow | null;
   extraUsage: ClaudeCodeExtraUsage | null;
+  viaProxy: boolean;
+  proxyUrl?: string;
 }
 
 // 磁盘使用量数据
@@ -74,6 +76,8 @@ export interface AppSettings {
   zhipuApiKey: string;
   deepseekApiKey: string;
   refreshIntervalSec: number;
+  proxyUrl: string;
+  noProxyDns: string[];
 }
 
 // 使用数据

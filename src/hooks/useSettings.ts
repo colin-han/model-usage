@@ -6,6 +6,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   zhipuApiKey: '',
   deepseekApiKey: '',
   refreshIntervalSec: 120,
+  proxyUrl: 'http://localhost:7890',
+  noProxyDns: ['172.20.5.1'],
 };
 
 export function useSettings() {

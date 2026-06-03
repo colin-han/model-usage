@@ -12,6 +12,8 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
   const [zhipu, setZhipu] = useState(initial.zhipuApiKey);
   const [deepseek, setDeepseek] = useState(initial.deepseekApiKey);
   const [interval, setIntervalSec] = useState(initial.refreshIntervalSec);
+  const [proxyUrl, setProxyUrl] = useState(initial.proxyUrl);
+  const [noProxyDns, setNoProxyDns] = useState(initial.noProxyDns.join('\n'));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,6 +22,8 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
       setZhipu(initial.zhipuApiKey);
       setDeepseek(initial.deepseekApiKey);
       setIntervalSec(initial.refreshIntervalSec);
+      setProxyUrl(initial.proxyUrl);
+      setNoProxyDns(initial.noProxyDns.join('\n'));
       setError(null);
     }
   }, [open, initial]);
@@ -34,10 +38,16 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
     setSaving(true);
     setError(null);
     try {
+      const dnsList = noProxyDns
+        .split(/[\n,]/)
+        .map(s => s.trim())
+        .filter(Boolean);
       await onSave({
         zhipuApiKey: zhipu.trim(),
         deepseekApiKey: deepseek.trim(),
         refreshIntervalSec: interval,
+        proxyUrl: proxyUrl.trim(),
+        noProxyDns: dnsList,
       });
       onClose();
     } catch (err) {
@@ -93,6 +103,31 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
             />
             <p className="text-[11px] text-white/40 mt-1">
               建议 ≥ 120 秒，避免触发 Anthropic /api/oauth/usage 限流
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-white/70 mb-1">代理地址</label>
+            <input
+              type="text"
+              value={proxyUrl}
+              onChange={e => setProxyUrl(e.target.value)}
+              placeholder="留空则始终直连"
+              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-white/70 mb-1">免代理 DNS（每行或逗号分隔）</label>
+            <textarea
+              value={noProxyDns}
+              onChange={e => setNoProxyDns(e.target.value)}
+              rows={2}
+              placeholder="172.20.5.1"
+              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40 resize-y"
+            />
+            <p className="text-[11px] text-white/40 mt-1">
+              当前 DNS 命中此列表则直连访问 Anthropic，否则走代理
             </p>
           </div>
         </div>

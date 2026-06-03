@@ -5,7 +5,7 @@ use std::process::Command;
 
 // ===== 应用设置（保存到 ~/.config/model-usage/setting.json） =====
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(rename = "zhipuApiKey", default)]
     pub zhipu_api_key: String,
@@ -13,10 +13,34 @@ pub struct AppSettings {
     pub deepseek_api_key: String,
     #[serde(rename = "refreshIntervalSec", default = "default_refresh_interval")]
     pub refresh_interval_sec: u64,
+    #[serde(rename = "proxyUrl", default = "default_proxy_url")]
+    pub proxy_url: String,
+    #[serde(rename = "noProxyDns", default = "default_no_proxy_dns")]
+    pub no_proxy_dns: Vec<String>,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            zhipu_api_key: String::new(),
+            deepseek_api_key: String::new(),
+            refresh_interval_sec: default_refresh_interval(),
+            proxy_url: default_proxy_url(),
+            no_proxy_dns: default_no_proxy_dns(),
+        }
+    }
 }
 
 fn default_refresh_interval() -> u64 {
     120
+}
+
+fn default_proxy_url() -> String {
+    "http://localhost:7890".to_string()
+}
+
+fn default_no_proxy_dns() -> Vec<String> {
+    vec!["172.20.5.1".to_string()]
 }
 
 fn settings_path() -> Result<PathBuf, String> {
@@ -128,6 +152,10 @@ pub struct ClaudeCodeUsageResult {
     pub seven_day_sonnet: Option<ClaudeOauthWindow>,
     #[serde(rename = "extraUsage")]
     pub extra_usage: Option<ClaudeExtraUsage>,
+    #[serde(rename = "viaProxy")]
+    pub via_proxy: bool,
+    #[serde(rename = "proxyUrl", skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -201,11 +229,58 @@ fn read_oauth_token() -> Result<String, String> {
     parse_token_from_json(&raw)
 }
 
+fn read_current_dns_servers() -> Vec<String> {
+    let output = Command::new("scutil").arg("--dns").output();
+    let Ok(out) = output else { return Vec::new(); };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let mut servers = Vec::new();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("nameserver[") {
+            if let Some(idx) = rest.find(": ") {
+                let server = rest[idx + 2..].trim().to_string();
+                if !server.is_empty() && !servers.contains(&server) {
+                    servers.push(server);
+                }
+            }
+        }
+    }
+    servers
+}
+
+fn should_use_proxy(no_proxy_dns: &[String]) -> bool {
+    if no_proxy_dns.is_empty() {
+        return true;
+    }
+    let current = read_current_dns_servers();
+    if current.is_empty() {
+        return true;
+    }
+    !current.iter().any(|c| no_proxy_dns.iter().any(|d| d == c))
+}
+
 #[tauri::command]
 pub async fn fetch_claude_code_usage() -> Result<ClaudeCodeUsageResult, String> {
     let token = read_oauth_token()?;
+    let settings = load_settings().unwrap_or_default();
 
-    let client = reqwest::Client::new();
+    let mut builder = reqwest::Client::builder();
+    let mut via_proxy = false;
+    let mut used_proxy_url: Option<String> = None;
+    if !settings.proxy_url.trim().is_empty() && should_use_proxy(&settings.no_proxy_dns) {
+        let proxy = reqwest::Proxy::all(&settings.proxy_url)
+            .map_err(|e| format!("代理地址无效 ({}): {}", settings.proxy_url, e))?;
+        builder = builder.proxy(proxy);
+        via_proxy = true;
+        used_proxy_url = Some(settings.proxy_url.clone());
+    }
+    let client = builder
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
     let response = client
         .get("https://api.anthropic.com/api/oauth/usage")
         .header("Authorization", format!("Bearer {}", token))
@@ -235,6 +310,8 @@ pub async fn fetch_claude_code_usage() -> Result<ClaudeCodeUsageResult, String> 
         seven_day_opus: raw.seven_day_opus,
         seven_day_sonnet: raw.seven_day_sonnet,
         extra_usage: raw.extra_usage,
+        via_proxy,
+        proxy_url: used_proxy_url,
     })
 }
 
