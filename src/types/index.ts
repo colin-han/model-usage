@@ -60,6 +60,15 @@ export interface ClaudeCodeUsageData {
   extraUsage: ClaudeCodeExtraUsage | null;
 }
 
+// 磁盘使用量数据
+export interface DiskUsageData {
+  mountPoint: string;
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+  percentage: number;
+}
+
 // 应用设置
 export interface AppSettings {
   zhipuApiKey: string;
@@ -72,9 +81,11 @@ export interface UsageData {
   zhipu: ZhipuQuotaData | null;
   deepseek: DeepSeekUsageData | null;
   claudeCode: ClaudeCodeUsageData | null;
+  diskUsage: DiskUsageData | null;
   lastUpdated: string | null;
   error: string | null;
   zhipuError: string | null;
   deepseekError: string | null;
   claudeCodeError: string | null;
+  diskUsageError: string | null;
 }

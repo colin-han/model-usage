@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ZhipuCard } from './components/ZhipuCard';
 import { DeepSeekCard } from './components/DeepSeekCard';
 import { ClaudeCodeCard } from './components/ClaudeCodeCard';
+import { DiskUsageCard } from './components/DiskUsageCard';
 import { TitleBar } from './components/TitleBar';
 import { SettingsModal } from './components/SettingsModal';
 import { useUsageData } from './hooks/useUsageData';
@@ -30,6 +31,7 @@ function App() {
         <ClaudeCodeCard data={data.claudeCode} error={data.claudeCodeError} />
         <ZhipuCard data={data.zhipu} error={data.zhipuError} />
         <DeepSeekCard data={data.deepseek} error={data.deepseekError} />
+        <DiskUsageCard data={data.diskUsage} error={data.diskUsageError} />
       </main>
 
       <SettingsModal

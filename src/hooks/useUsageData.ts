@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, ClaudeCodeUsageData } from '../types';
+import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, ClaudeCodeUsageData, DiskUsageData } from '../types';
 
 // 智谱 unit 枚举：3=五小时, 5=月, 6=周
 const UNIT_LABELS: Record<number, string> = {
@@ -51,11 +51,13 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     zhipu: null,
     deepseek: null,
     claudeCode: null,
+    diskUsage: null,
     lastUpdated: null,
     error: null,
     zhipuError: null,
     deepseekError: null,
     claudeCodeError: null,
+    diskUsageError: null,
   });
   const [loading, setLoading] = useState(false);
 
@@ -63,7 +65,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     // 即使未配置 API Key，仍然尝试拉取 Windsurf / Claude Code 本地数据
 
     setLoading(true);
-    setData(prev => ({ ...prev, error: null, zhipuError: null, deepseekError: null, claudeCodeError: null }));
+    setData(prev => ({ ...prev, error: null, zhipuError: null, deepseekError: null, claudeCodeError: null, diskUsageError: null }));
 
     try {
       let zhipuData: ZhipuQuotaData | null = null;
@@ -72,6 +74,8 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
       let deepseekError: string | null = null;
       let claudeCodeData: ClaudeCodeUsageData | null = null;
       let claudeCodeError: string | null = null;
+      let diskUsageData: DiskUsageData | null = null;
+      let diskUsageError: string | null = null;
 
       // 获取智谱数据
       if (settings.zhipuApiKey) {
@@ -110,15 +114,30 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         }
       }
 
+      // 获取磁盘使用量
+      try {
+        diskUsageData = await invoke<DiskUsageData>('get_disk_usage');
+      } catch (err) {
+        if (typeof err === 'string') {
+          diskUsageError = err;
+        } else if (err instanceof Error) {
+          diskUsageError = err.message;
+        } else {
+          diskUsageError = JSON.stringify(err);
+        }
+      }
+
       setData({
         zhipu: zhipuData,
         deepseek: deepseekData,
         claudeCode: claudeCodeData,
+        diskUsage: diskUsageData,
         lastUpdated: new Date().toISOString(),
         error: null,
         zhipuError,
         deepseekError,
         claudeCodeError,
+        diskUsageError,
       });
     } catch (err) {
       setData(prev => ({

@@ -286,3 +286,71 @@ pub async fn fetch_zhipu_quota(api_key: String) -> Result<ZhipuQuotaResult, Stri
         },
     })
 }
+
+// ===== 磁盘使用量 =====
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageResult {
+    pub mount_point: String,
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub available_bytes: u64,
+    pub percentage: f64,
+}
+
+// 获取根分区的磁盘使用量（通过 df 命令）
+#[tauri::command]
+pub fn get_disk_usage() -> Result<DiskUsageResult, String> {
+    let output = Command::new("df")
+        .args(["-k", "/"])
+        .output()
+        .map_err(|e| format!("执行 df 命令失败: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "df 命令返回错误: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // 第二行是数据行（第一行是表头）
+    let data_line = stdout
+        .lines()
+        .nth(1)
+        .ok_or_else(|| "df 输出格式异常：缺少数据行".to_string())?;
+
+    let fields: Vec<&str> = data_line.split_whitespace().collect();
+    if fields.len() < 4 {
+        return Err(format!("df 输出字段不足: {}", data_line));
+    }
+
+    // df -k 单位为 1024 字节块。
+    // 注意 APFS：第 1 列 1024-blocks 是整个容器（物理盘）的总容量，
+    // 第 2 列 Used 仅为当前挂载卷自身占用，不能代表全盘。
+    // 真实已用空间应为 总量 - 可用，才与"关于本机"一致。
+    let total_blocks: u64 = fields[1]
+        .parse()
+        .map_err(|e| format!("解析总块数失败: {}", e))?;
+    let available_blocks: u64 = fields[3]
+        .parse()
+        .map_err(|e| format!("解析可用块数失败: {}", e))?;
+
+    let total_bytes = total_blocks * 1024;
+    let available_bytes = available_blocks * 1024;
+    let used_bytes = total_bytes.saturating_sub(available_bytes);
+    let percentage = if total_bytes > 0 {
+        used_bytes as f64 / total_bytes as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(DiskUsageResult {
+        mount_point: "/".to_string(),
+        total_bytes,
+        used_bytes,
+        available_bytes,
+        percentage,
+    })
+}
