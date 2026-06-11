@@ -3,6 +3,7 @@ import type { ZhipuQuotaData, ZhipuLimitItem } from '../types';
 interface ZhipuCardProps {
   data: ZhipuQuotaData | null;
   error?: string | null;
+  loading?: boolean;
 }
 
 function formatResetTime(timestamp: number): string {
@@ -102,13 +103,13 @@ function LimitItem({ item }: { item: ZhipuLimitItem }) {
   );
 }
 
-export function ZhipuCard({ data, error }: ZhipuCardProps) {
+export function ZhipuCard({ data, error, loading }: ZhipuCardProps) {
   if (!data) {
     return (
       <div className="glass-card p-4 mb-4">
         <h2 className="text-lg font-bold text-white/90 mb-2">🤖 智谱 AI</h2>
-        <p className="text-white/50 text-sm">
-          {error ? `数据获取失败: ${error}` : '未配置 API Key'}
+        <p className={`text-white/50 text-sm ${loading ? 'animate-pulse' : ''}`}>
+          {loading ? '加载中...' : error ? `数据获取失败: ${error}` : '未配置 API Key'}
         </p>
       </div>
     );

@@ -11,6 +11,20 @@ pub struct AppSettings {
     pub zhipu_api_key: String,
     #[serde(rename = "deepseekApiKey", default)]
     pub deepseek_api_key: String,
+    #[serde(rename = "volcengineAccessKey", default)]
+    pub volcengine_access_key: String,
+    #[serde(rename = "volcengineSecretKey", default)]
+    pub volcengine_secret_key: String,
+    #[serde(rename = "showClaudeCode", default = "default_true")]
+    pub show_claude_code: bool,
+    #[serde(rename = "showZhipu", default = "default_true")]
+    pub show_zhipu: bool,
+    #[serde(rename = "showDeepseek", default = "default_true")]
+    pub show_deepseek: bool,
+    #[serde(rename = "showVolcengine", default = "default_true")]
+    pub show_volcengine: bool,
+    #[serde(rename = "showDiskUsage", default = "default_true")]
+    pub show_disk_usage: bool,
     #[serde(rename = "refreshIntervalSec", default = "default_refresh_interval")]
     pub refresh_interval_sec: u64,
     #[serde(rename = "proxyUrl", default = "default_proxy_url")]
@@ -24,6 +38,13 @@ impl Default for AppSettings {
         Self {
             zhipu_api_key: String::new(),
             deepseek_api_key: String::new(),
+            volcengine_access_key: String::new(),
+            volcengine_secret_key: String::new(),
+            show_claude_code: true,
+            show_zhipu: true,
+            show_deepseek: true,
+            show_volcengine: true,
+            show_disk_usage: true,
             refresh_interval_sec: default_refresh_interval(),
             proxy_url: default_proxy_url(),
             no_proxy_dns: default_no_proxy_dns(),
@@ -33,6 +54,10 @@ impl Default for AppSettings {
 
 fn default_refresh_interval() -> u64 {
     120
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_proxy_url() -> String {
@@ -361,6 +386,124 @@ pub async fn fetch_zhipu_quota(api_key: String) -> Result<ZhipuQuotaResult, Stri
             remaining: weekly_remaining,
             reset_time: quota.data.weekly_limit.reset_time,
         },
+    })
+}
+
+// ===== 火山引擎账户余额（OpenAPI QueryBalanceAcct，需 AK/SK 签名） =====
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VolcengineBalanceResult {
+    pub available_balance: f64,
+    pub cash_balance: f64,
+    pub credit_limit: f64,
+    pub freeze_amount: f64,
+    pub arrears_balance: f64,
+}
+
+fn hmac_sha256(key: &[u8], data: &str) -> Vec<u8> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let mut mac =
+        <Hmac<Sha256> as Mac>::new_from_slice(key).expect("HMAC 可接受任意长度的 key");
+    mac.update(data.as_bytes());
+    mac.finalize().into_bytes().to_vec()
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(data))
+}
+
+// 兼容数字与字符串两种格式的金额字段
+fn json_to_f64(value: Option<&serde_json::Value>) -> f64 {
+    match value {
+        Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+        Some(serde_json::Value::String(s)) => s.parse().unwrap_or(0.0),
+        _ => 0.0,
+    }
+}
+
+#[tauri::command]
+pub async fn fetch_volcengine_balance(
+    access_key: String,
+    secret_key: String,
+) -> Result<VolcengineBalanceResult, String> {
+    const HOST: &str = "billing.volcengineapi.com";
+    const REGION: &str = "cn-north-1";
+    const SERVICE: &str = "billing";
+    const QUERY: &str = "Action=QueryBalanceAcct&Version=2022-01-01";
+
+    let now = chrono::Utc::now();
+    let x_date = now.format("%Y%m%dT%H%M%SZ").to_string();
+    let short_date = now.format("%Y%m%d").to_string();
+
+    // 火山引擎签名 V4：CanonicalRequest -> StringToSign -> 派生签名密钥 -> Signature
+    let payload_hash = sha256_hex(b"");
+    let canonical_headers = format!(
+        "host:{}\nx-content-sha256:{}\nx-date:{}\n",
+        HOST, payload_hash, x_date
+    );
+    let signed_headers = "host;x-content-sha256;x-date";
+    let canonical_request = format!(
+        "GET\n/\n{}\n{}\n{}\n{}",
+        QUERY, canonical_headers, signed_headers, payload_hash
+    );
+
+    let credential_scope = format!("{}/{}/{}/request", short_date, REGION, SERVICE);
+    let string_to_sign = format!(
+        "HMAC-SHA256\n{}\n{}\n{}",
+        x_date,
+        credential_scope,
+        sha256_hex(canonical_request.as_bytes())
+    );
+
+    let k_date = hmac_sha256(secret_key.as_bytes(), &short_date);
+    let k_region = hmac_sha256(&k_date, REGION);
+    let k_service = hmac_sha256(&k_region, SERVICE);
+    let k_signing = hmac_sha256(&k_service, "request");
+    let signature = hex::encode(hmac_sha256(&k_signing, &string_to_sign));
+
+    let authorization = format!(
+        "HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",
+        access_key, credential_scope, signed_headers, signature
+    );
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("https://{}/?{}", HOST, QUERY))
+        .header("X-Date", &x_date)
+        .header("X-Content-Sha256", &payload_hash)
+        .header("Authorization", authorization)
+        .send()
+        .await
+        .map_err(|e| format!("请求火山引擎余额接口失败: {}", e))?;
+
+    let status = response.status();
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析火山引擎响应失败: {}", e))?;
+
+    if let Some(err) = body.pointer("/ResponseMetadata/Error") {
+        let code = err.get("Code").and_then(|v| v.as_str()).unwrap_or("Unknown");
+        let msg = err.get("Message").and_then(|v| v.as_str()).unwrap_or("");
+        return Err(format!("火山引擎 API 错误 ({}): {}", code, msg));
+    }
+    if !status.is_success() {
+        return Err(format!("火山引擎 API 返回 HTTP {}", status));
+    }
+
+    let result = body
+        .get("Result")
+        .ok_or_else(|| "火山引擎响应缺少 Result 字段".to_string())?;
+
+    Ok(VolcengineBalanceResult {
+        available_balance: json_to_f64(result.get("AvailableBalance")),
+        cash_balance: json_to_f64(result.get("CashBalance")),
+        credit_limit: json_to_f64(result.get("CreditLimit")),
+        freeze_amount: json_to_f64(result.get("FreezeAmount")),
+        arrears_balance: json_to_f64(result.get("ArrearsBalance")),
     })
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, ClaudeCodeUsageData, DiskUsageData } from '../types';
+import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, VolcengineBalanceData, ClaudeCodeUsageData, DiskUsageData } from '../types';
 
 // 智谱 unit 枚举：3=五小时, 5=月, 6=周
 const UNIT_LABELS: Record<number, string> = {
@@ -50,12 +50,14 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
   const [data, setData] = useState<UsageData>({
     zhipu: null,
     deepseek: null,
+    volcengine: null,
     claudeCode: null,
     diskUsage: null,
     lastUpdated: null,
     error: null,
     zhipuError: null,
     deepseekError: null,
+    volcengineError: null,
     claudeCodeError: null,
     diskUsageError: null,
   });
@@ -65,20 +67,23 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     // 即使未配置 API Key，仍然尝试拉取 Windsurf / Claude Code 本地数据
 
     setLoading(true);
-    setData(prev => ({ ...prev, error: null, zhipuError: null, deepseekError: null, claudeCodeError: null, diskUsageError: null }));
+    // 注意：这里不清空上次的错误，刷新期间前端依赖旧错误判断"上次失败且正在加载"的 loading 态，
+    // 本轮结果会在末尾的 setData 中整体覆盖。
 
     try {
       let zhipuData: ZhipuQuotaData | null = null;
       let zhipuError: string | null = null;
       let deepseekData: DeepSeekUsageData | null = null;
       let deepseekError: string | null = null;
+      let volcengineData: VolcengineBalanceData | null = null;
+      let volcengineError: string | null = null;
       let claudeCodeData: ClaudeCodeUsageData | null = null;
       let claudeCodeError: string | null = null;
       let diskUsageData: DiskUsageData | null = null;
       let diskUsageError: string | null = null;
 
       // 获取智谱数据
-      if (settings.zhipuApiKey) {
+      if (settings.showZhipu && settings.zhipuApiKey) {
         try {
           const resp = await fetch('https://bigmodel.cn/api/monitor/usage/quota/limit', {
             headers: { 'Authorization': `Bearer ${settings.zhipuApiKey}` },
@@ -93,7 +98,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
       }
 
       // 获取 DeepSeek 数据
-      if (settings.deepseekApiKey) {
+      if (settings.showDeepseek && settings.deepseekApiKey) {
         try {
           deepseekData = await fetchDeepSeekData(settings.deepseekApiKey);
         } catch (err) {
@@ -101,41 +106,65 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         }
       }
 
+      // 获取火山引擎账户余额（需 AK/SK 签名，走 Rust 后端）
+      if (settings.showVolcengine && settings.volcengineAccessKey && settings.volcengineSecretKey) {
+        try {
+          volcengineData = await invoke<VolcengineBalanceData>('fetch_volcengine_balance', {
+            accessKey: settings.volcengineAccessKey,
+            secretKey: settings.volcengineSecretKey,
+          });
+        } catch (err) {
+          if (typeof err === 'string') {
+            volcengineError = err;
+          } else if (err instanceof Error) {
+            volcengineError = err.message;
+          } else {
+            volcengineError = JSON.stringify(err);
+          }
+        }
+      }
+
       // 获取 Claude Code 用量
-      try {
-        claudeCodeData = await invoke<ClaudeCodeUsageData>('fetch_claude_code_usage');
-      } catch (err) {
-        if (typeof err === 'string') {
-          claudeCodeError = err;
-        } else if (err instanceof Error) {
-          claudeCodeError = err.message;
-        } else {
-          claudeCodeError = JSON.stringify(err);
+      if (settings.showClaudeCode) {
+        try {
+          claudeCodeData = await invoke<ClaudeCodeUsageData>('fetch_claude_code_usage');
+        } catch (err) {
+          if (typeof err === 'string') {
+            claudeCodeError = err;
+          } else if (err instanceof Error) {
+            claudeCodeError = err.message;
+          } else {
+            claudeCodeError = JSON.stringify(err);
+          }
         }
       }
 
       // 获取磁盘使用量
-      try {
-        diskUsageData = await invoke<DiskUsageData>('get_disk_usage');
-      } catch (err) {
-        if (typeof err === 'string') {
-          diskUsageError = err;
-        } else if (err instanceof Error) {
-          diskUsageError = err.message;
-        } else {
-          diskUsageError = JSON.stringify(err);
+      if (settings.showDiskUsage) {
+        try {
+          diskUsageData = await invoke<DiskUsageData>('get_disk_usage');
+        } catch (err) {
+          if (typeof err === 'string') {
+            diskUsageError = err;
+          } else if (err instanceof Error) {
+            diskUsageError = err.message;
+          } else {
+            diskUsageError = JSON.stringify(err);
+          }
         }
       }
 
       setData({
         zhipu: zhipuData,
         deepseek: deepseekData,
+        volcengine: volcengineData,
         claudeCode: claudeCodeData,
         diskUsage: diskUsageData,
         lastUpdated: new Date().toISOString(),
         error: null,
         zhipuError,
         deepseekError,
+        volcengineError,
         claudeCodeError,
         diskUsageError,
       });
@@ -147,7 +176,17 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     } finally {
       setLoading(false);
     }
-  }, [settings.zhipuApiKey, settings.deepseekApiKey]);
+  }, [
+    settings.zhipuApiKey,
+    settings.deepseekApiKey,
+    settings.volcengineAccessKey,
+    settings.volcengineSecretKey,
+    settings.showClaudeCode,
+    settings.showZhipu,
+    settings.showDeepseek,
+    settings.showVolcengine,
+    settings.showDiskUsage,
+  ]);
 
   useEffect(() => {
     if (!enabled) return;

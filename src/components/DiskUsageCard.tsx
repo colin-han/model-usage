@@ -3,6 +3,7 @@ import type { DiskUsageData } from '../types';
 interface DiskUsageCardProps {
   data: DiskUsageData | null;
   error?: string | null;
+  loading?: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -18,13 +19,13 @@ function getUsageColor(percentage: number): string {
   return 'bg-blue-400';
 }
 
-export function DiskUsageCard({ data, error }: DiskUsageCardProps) {
+export function DiskUsageCard({ data, error, loading }: DiskUsageCardProps) {
   if (!data) {
     return (
       <div className="glass-card p-4 mb-4">
         <h2 className="text-lg font-bold text-white/90 mb-2">💾 磁盘使用量</h2>
-        <p className="text-white/50 text-sm">
-          {error ? `数据获取失败: ${error}` : '加载中...'}
+        <p className={`text-white/50 text-sm ${loading ? 'animate-pulse' : ''}`}>
+          {loading ? '加载中...' : error ? `数据获取失败: ${error}` : '暂无数据'}
         </p>
       </div>
     );

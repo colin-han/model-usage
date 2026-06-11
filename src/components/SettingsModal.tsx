@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -8,9 +9,58 @@ interface SettingsModalProps {
   onSave: (next: AppSettings) => Promise<void>;
 }
 
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative w-9 h-5 rounded-full transition-colors ${
+        checked ? 'bg-emerald-400/70' : 'bg-white/15'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-4' : ''
+        }`}
+      />
+    </button>
+  );
+}
+
+interface SettingGroupProps {
+  title: string;
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
+  children?: ReactNode;
+}
+
+function SettingGroup({ title, enabled, onToggle, children }: SettingGroupProps) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-white/80">{title}</span>
+        <Toggle checked={enabled} onChange={onToggle} />
+      </div>
+      {enabled && children && <div className="mt-3 space-y-3">{children}</div>}
+    </div>
+  );
+}
+
+const inputClass =
+  'w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40';
+
 export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalProps) {
   const [zhipu, setZhipu] = useState(initial.zhipuApiKey);
   const [deepseek, setDeepseek] = useState(initial.deepseekApiKey);
+  const [volcAk, setVolcAk] = useState(initial.volcengineAccessKey);
+  const [volcSk, setVolcSk] = useState(initial.volcengineSecretKey);
+  const [showClaudeCode, setShowClaudeCode] = useState(initial.showClaudeCode);
+  const [showZhipu, setShowZhipu] = useState(initial.showZhipu);
+  const [showDeepseek, setShowDeepseek] = useState(initial.showDeepseek);
+  const [showVolcengine, setShowVolcengine] = useState(initial.showVolcengine);
+  const [showDiskUsage, setShowDiskUsage] = useState(initial.showDiskUsage);
   const [interval, setIntervalSec] = useState(initial.refreshIntervalSec);
   const [proxyUrl, setProxyUrl] = useState(initial.proxyUrl);
   const [noProxyDns, setNoProxyDns] = useState(initial.noProxyDns.join('\n'));
@@ -21,6 +71,13 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
     if (open) {
       setZhipu(initial.zhipuApiKey);
       setDeepseek(initial.deepseekApiKey);
+      setVolcAk(initial.volcengineAccessKey);
+      setVolcSk(initial.volcengineSecretKey);
+      setShowClaudeCode(initial.showClaudeCode);
+      setShowZhipu(initial.showZhipu);
+      setShowDeepseek(initial.showDeepseek);
+      setShowVolcengine(initial.showVolcengine);
+      setShowDiskUsage(initial.showDiskUsage);
       setIntervalSec(initial.refreshIntervalSec);
       setProxyUrl(initial.proxyUrl);
       setNoProxyDns(initial.noProxyDns.join('\n'));
@@ -45,6 +102,13 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
       await onSave({
         zhipuApiKey: zhipu.trim(),
         deepseekApiKey: deepseek.trim(),
+        volcengineAccessKey: volcAk.trim(),
+        volcengineSecretKey: volcSk.trim(),
+        showClaudeCode,
+        showZhipu,
+        showDeepseek,
+        showVolcengine,
+        showDiskUsage,
         refreshIntervalSec: interval,
         proxyUrl: proxyUrl.trim(),
         noProxyDns: dnsList,
@@ -64,33 +128,88 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
       onClick={onClose}
     >
       <div
-        className="glass-card p-5 w-[420px] max-w-[90vw]"
+        className="glass-card p-5 w-[420px] max-w-[90vw] max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <h2 className="text-lg font-bold text-white/90 mb-4">设置</h2>
 
         <div className="space-y-3">
-          <div>
-            <label className="block text-sm text-white/70 mb-1">智谱 API Key</label>
-            <input
-              type="password"
-              value={zhipu}
-              onChange={e => setZhipu(e.target.value)}
-              placeholder="留空则不启用智谱卡片"
-              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40"
-            />
-          </div>
+          <SettingGroup title="🤖 Claude Code" enabled={showClaudeCode} onToggle={setShowClaudeCode}>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">代理地址</label>
+              <input
+                type="text"
+                value={proxyUrl}
+                onChange={e => setProxyUrl(e.target.value)}
+                placeholder="留空则始终直连"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">免代理 DNS（每行或逗号分隔）</label>
+              <textarea
+                value={noProxyDns}
+                onChange={e => setNoProxyDns(e.target.value)}
+                rows={2}
+                placeholder="172.20.5.1"
+                className={`${inputClass} resize-y`}
+              />
+              <p className="text-[11px] text-white/40 mt-1">
+                当前 DNS 命中此列表则直连访问 Anthropic，否则走代理
+              </p>
+            </div>
+          </SettingGroup>
 
-          <div>
-            <label className="block text-sm text-white/70 mb-1">DeepSeek API Key</label>
-            <input
-              type="password"
-              value={deepseek}
-              onChange={e => setDeepseek(e.target.value)}
-              placeholder="留空则不启用 DeepSeek 卡片"
-              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40"
-            />
-          </div>
+          <SettingGroup title="🤖 智谱 AI" enabled={showZhipu} onToggle={setShowZhipu}>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">API Key</label>
+              <input
+                type="password"
+                value={zhipu}
+                onChange={e => setZhipu(e.target.value)}
+                placeholder="留空则不显示数据"
+                className={inputClass}
+              />
+            </div>
+          </SettingGroup>
+
+          <SettingGroup title="🧠 DeepSeek" enabled={showDeepseek} onToggle={setShowDeepseek}>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">API Key</label>
+              <input
+                type="password"
+                value={deepseek}
+                onChange={e => setDeepseek(e.target.value)}
+                placeholder="留空则不显示数据"
+                className={inputClass}
+              />
+            </div>
+          </SettingGroup>
+
+          <SettingGroup title="🌋 火山引擎" enabled={showVolcengine} onToggle={setShowVolcengine}>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">Access Key</label>
+              <input
+                type="password"
+                value={volcAk}
+                onChange={e => setVolcAk(e.target.value)}
+                placeholder="控制台「API 访问密钥」中生成"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">Secret Key</label>
+              <input
+                type="password"
+                value={volcSk}
+                onChange={e => setVolcSk(e.target.value)}
+                placeholder="与 Access Key 配套使用"
+                className={inputClass}
+              />
+            </div>
+          </SettingGroup>
+
+          <SettingGroup title="💾 磁盘使用量" enabled={showDiskUsage} onToggle={setShowDiskUsage} />
 
           <div>
             <label className="block text-sm text-white/70 mb-1">刷新间隔 (秒)</label>
@@ -99,35 +218,10 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
               min={30}
               value={interval}
               onChange={e => setIntervalSec(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 focus:outline-none focus:border-white/40"
+              className={inputClass}
             />
             <p className="text-[11px] text-white/40 mt-1">
               建议 ≥ 120 秒，避免触发 Anthropic /api/oauth/usage 限流
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm text-white/70 mb-1">代理地址</label>
-            <input
-              type="text"
-              value={proxyUrl}
-              onChange={e => setProxyUrl(e.target.value)}
-              placeholder="留空则始终直连"
-              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-white/70 mb-1">免代理 DNS（每行或逗号分隔）</label>
-            <textarea
-              value={noProxyDns}
-              onChange={e => setNoProxyDns(e.target.value)}
-              rows={2}
-              placeholder="172.20.5.1"
-              className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/15 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-white/40 resize-y"
-            />
-            <p className="text-[11px] text-white/40 mt-1">
-              当前 DNS 命中此列表则直连访问 Anthropic，否则走代理
             </p>
           </div>
         </div>

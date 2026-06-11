@@ -16,7 +16,7 @@
         "title": "AI Coding Plan Monitor",
         "width": 380,
         "height": 880,
-        "resizable": true,
+        "resizable": false,
         "fullscreen": false,
         "transparent": true,
         "decorations": false,

@@ -5,6 +5,13 @@ import type { AppSettings } from '../types';
 const DEFAULT_SETTINGS: AppSettings = {
   zhipuApiKey: '',
   deepseekApiKey: '',
+  volcengineAccessKey: '',
+  volcengineSecretKey: '',
+  showClaudeCode: true,
+  showZhipu: true,
+  showDeepseek: true,
+  showVolcengine: true,
+  showDiskUsage: true,
   refreshIntervalSec: 120,
   proxyUrl: 'http://localhost:7890',
   noProxyDns: ['172.20.5.1'],

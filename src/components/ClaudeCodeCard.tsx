@@ -3,6 +3,7 @@ import type { ClaudeCodeUsageData, ClaudeCodeUsageWindow } from '../types';
 interface ClaudeCodeCardProps {
   data: ClaudeCodeUsageData | null;
   error?: string | null;
+  loading?: boolean;
 }
 
 type WindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet';
@@ -99,13 +100,13 @@ function UsageRow({
   );
 }
 
-export function ClaudeCodeCard({ data, error }: ClaudeCodeCardProps) {
+export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
   if (!data) {
     return (
       <div className="glass-card p-4 mb-4">
         <h2 className="text-lg font-bold text-white/90 mb-2">🤖 Claude Code</h2>
-        <p className="text-white/50 text-sm">
-          {error ? `数据获取失败: ${error}` : '加载中...'}
+        <p className={`text-white/50 text-sm ${loading ? 'animate-pulse' : ''}`}>
+          {loading ? '加载中...' : error ? `数据获取失败: ${error}` : '暂无数据'}
         </p>
       </div>
     );

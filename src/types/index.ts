@@ -36,6 +36,15 @@ export interface DeepSeekUsageData {
   balance: DeepSeekBalanceData | null;
 }
 
+// 火山引擎账户余额（来自 OpenAPI QueryBalanceAcct）
+export interface VolcengineBalanceData {
+  availableBalance: number;
+  cashBalance: number;
+  creditLimit: number;
+  freezeAmount: number;
+  arrearsBalance: number;
+}
+
 // Claude Code 订阅用量窗口（来自 /api/oauth/usage）
 export interface ClaudeCodeUsageWindow {
   utilization: number;       // 已使用百分比 (0-100)
@@ -75,6 +84,13 @@ export interface DiskUsageData {
 export interface AppSettings {
   zhipuApiKey: string;
   deepseekApiKey: string;
+  volcengineAccessKey: string;
+  volcengineSecretKey: string;
+  showClaudeCode: boolean;
+  showZhipu: boolean;
+  showDeepseek: boolean;
+  showVolcengine: boolean;
+  showDiskUsage: boolean;
   refreshIntervalSec: number;
   proxyUrl: string;
   noProxyDns: string[];
@@ -84,12 +100,14 @@ export interface AppSettings {
 export interface UsageData {
   zhipu: ZhipuQuotaData | null;
   deepseek: DeepSeekUsageData | null;
+  volcengine: VolcengineBalanceData | null;
   claudeCode: ClaudeCodeUsageData | null;
   diskUsage: DiskUsageData | null;
   lastUpdated: string | null;
   error: string | null;
   zhipuError: string | null;
   deepseekError: string | null;
+  volcengineError: string | null;
   claudeCodeError: string | null;
   diskUsageError: string | null;
 }
