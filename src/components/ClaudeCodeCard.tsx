@@ -61,10 +61,12 @@ function UsageRow({
   title,
   window,
   duration,
+  localTokens,
 }: {
   title: string;
   window: ClaudeCodeUsageWindow;
   duration: number | null;
+  localTokens?: number;
 }) {
   const usagePct = Math.max(0, Math.min(100, window.utilization));
   const timePct =
@@ -77,7 +79,14 @@ function UsageRow({
     <div className="mb-3 last:mb-0">
       <div className="flex justify-between items-center mb-1">
         <span className="text-sm font-medium text-white/80">{title}</span>
-        <span className="text-sm text-white/60">{usagePct.toFixed(1)}%</span>
+        <span className="text-sm text-white/60">
+          {localTokens != null && (
+            <span className="text-xs text-white/45 mr-2" title="本窗口内本地会话日志统计的 token 用量">
+              {formatTokens(localTokens)} tokens
+            </span>
+          )}
+          {usagePct.toFixed(1)}%
+        </span>
       </div>
       <div className={`glass-progress-bg w-full h-2 ${hasTimeBar ? 'mb-px' : 'mb-1'}`}>
         <div
@@ -98,6 +107,13 @@ function UsageRow({
       )}
     </div>
   );
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1e9) return `${(tokens / 1e9).toFixed(2)}B`;
+  if (tokens >= 1e6) return `${(tokens / 1e6).toFixed(1)}M`;
+  if (tokens >= 1e3) return `${(tokens / 1e3).toFixed(1)}k`;
+  return String(tokens);
 }
 
 export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
@@ -148,6 +164,13 @@ export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
             title={WINDOW_TITLES[key]}
             window={window!}
             duration={WINDOW_DURATIONS[key]}
+            localTokens={
+              key === 'fiveHour'
+                ? data.localUsage?.fiveHourTokens
+                : key === 'sevenDay'
+                  ? data.localUsage?.sevenDayTokens
+                  : undefined
+            }
           />
         ))
       )}

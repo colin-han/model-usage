@@ -181,6 +181,98 @@ pub struct ClaudeCodeUsageResult {
     pub via_proxy: bool,
     #[serde(rename = "proxyUrl", skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
+    #[serde(rename = "localUsage", skip_serializing_if = "Option::is_none", default)]
+    pub local_usage: Option<ClaudeLocalUsage>,
+}
+
+// ===== Claude Code 本地日志用量统计（随限额数据一并展示） =====
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeLocalUsage {
+    pub five_hour_tokens: u64,
+    pub seven_day_tokens: u64,
+}
+
+// 扫描 ~/.claude/projects/**/*.jsonl，统计两个官方窗口起点之后
+// assistant 消息的 token 用量（input + output + cache_creation）。
+// 窗口起点由 API 返回的重置时间逆推得出，与官方限额窗口对齐。
+fn scan_local_claude_usage(
+    five_hour_start: chrono::DateTime<chrono::Utc>,
+    seven_day_start: chrono::DateTime<chrono::Utc>,
+) -> Result<ClaudeLocalUsage, String> {
+    use std::collections::HashSet;
+
+    let home_dir = std::env::var("HOME").map_err(|_| "无法获取 HOME 目录".to_string())?;
+    let projects_dir = PathBuf::from(&home_dir).join(".claude/projects");
+    let earliest = seven_day_start.min(five_hour_start);
+
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    let mut five_hour_tokens = 0u64;
+    let mut seven_day_tokens = 0u64;
+
+    let projects = fs::read_dir(&projects_dir)
+        .map_err(|e| format!("读取 Claude 日志目录失败 ({}): {}", projects_dir.display(), e))?;
+    for project in projects.flatten() {
+        let Ok(files) = fs::read_dir(project.path()) else { continue };
+        for file in files.flatten() {
+            let path = file.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
+                continue;
+            }
+            // 窗口起点之前就没有再写入的会话文件直接跳过
+            if let Ok(modified) = file.metadata().and_then(|m| m.modified()) {
+                if chrono::DateTime::<chrono::Utc>::from(modified) < earliest {
+                    continue;
+                }
+            }
+            let Ok(content) = fs::read_to_string(&path) else { continue };
+            for line in content.lines() {
+                // 字符串粗过滤，减少 JSON 解析量
+                if !line.contains("\"assistant\"") || !line.contains("\"usage\"") {
+                    continue;
+                }
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+                if v.get("type").and_then(|t| t.as_str()) != Some("assistant") {
+                    continue;
+                }
+                let Some(ts) = v
+                    .get("timestamp")
+                    .and_then(|t| t.as_str())
+                    .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+                    .map(|t| t.with_timezone(&chrono::Utc))
+                else {
+                    continue;
+                };
+                if ts < earliest {
+                    continue;
+                }
+                let Some(message) = v.get("message") else { continue };
+                // 同一条 API 消息可能拆成多行写入（共享同一份 usage），按消息 id 去重
+                if let Some(id) = message.get("id").and_then(|i| i.as_str()) {
+                    if !seen_ids.insert(id.to_string()) {
+                        continue;
+                    }
+                }
+                let Some(usage) = message.get("usage") else { continue };
+                let tokens: u64 = ["input_tokens", "output_tokens", "cache_creation_input_tokens"]
+                    .iter()
+                    .map(|k| usage.get(*k).and_then(|x| x.as_u64()).unwrap_or(0))
+                    .sum();
+                if ts >= seven_day_start {
+                    seven_day_tokens += tokens;
+                }
+                if ts >= five_hour_start {
+                    five_hour_tokens += tokens;
+                }
+            }
+        }
+    }
+
+    Ok(ClaudeLocalUsage {
+        five_hour_tokens,
+        seven_day_tokens,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -287,20 +379,16 @@ fn should_use_proxy(no_proxy_dns: &[String]) -> bool {
     !current.iter().any(|c| no_proxy_dns.iter().any(|d| d == c))
 }
 
-#[tauri::command]
-pub async fn fetch_claude_code_usage() -> Result<ClaudeCodeUsageResult, String> {
-    let token = read_oauth_token()?;
-    let settings = load_settings().unwrap_or_default();
-
+// 按指定线路（代理或直连）请求一次 /api/oauth/usage
+async fn request_claude_usage(token: &str, proxy_url: Option<&str>) -> Result<ClaudeOauthRaw, String> {
     let mut builder = reqwest::Client::builder();
-    let mut via_proxy = false;
-    let mut used_proxy_url: Option<String> = None;
-    if !settings.proxy_url.trim().is_empty() && should_use_proxy(&settings.no_proxy_dns) {
-        let proxy = reqwest::Proxy::all(&settings.proxy_url)
-            .map_err(|e| format!("代理地址无效 ({}): {}", settings.proxy_url, e))?;
+    if let Some(p) = proxy_url {
+        let proxy =
+            reqwest::Proxy::all(p).map_err(|e| format!("代理地址无效 ({}): {}", p, e))?;
         builder = builder.proxy(proxy);
-        via_proxy = true;
-        used_proxy_url = Some(settings.proxy_url.clone());
+    } else {
+        // 直连时忽略系统/环境变量中的代理设置
+        builder = builder.no_proxy();
     }
     let client = builder
         .build()
@@ -324,20 +412,94 @@ pub async fn fetch_claude_code_usage() -> Result<ClaudeCodeUsageResult, String> 
         return Err(format!("API 返回 {}: {}", status, body));
     }
 
-    let raw: ClaudeOauthRaw = response
+    response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
+        .map_err(|e| format!("解析响应失败: {}", e))
+}
 
-    Ok(ClaudeCodeUsageResult {
-        five_hour: raw.five_hour,
-        seven_day: raw.seven_day,
-        seven_day_opus: raw.seven_day_opus,
-        seven_day_sonnet: raw.seven_day_sonnet,
-        extra_usage: raw.extra_usage,
-        via_proxy,
-        proxy_url: used_proxy_url,
+async fn fetch_claude_usage_from_api() -> Result<ClaudeCodeUsageResult, String> {
+    let token = read_oauth_token()?;
+    let settings = load_settings().unwrap_or_default();
+    let proxy_url = {
+        let p = settings.proxy_url.trim();
+        if p.is_empty() {
+            None
+        } else {
+            Some(p.to_string())
+        }
+    };
+
+    // 按 DNS 白名单决定首选线路；失败后自动切换另一条线路重试，
+    // 避免 DNS 判断与实际网络环境不符时（如公司 DNS 变更）彻底拿不到数据
+    let prefer_proxy = proxy_url.is_some() && should_use_proxy(&settings.no_proxy_dns);
+    let routes: Vec<Option<String>> = match (&proxy_url, prefer_proxy) {
+        (Some(p), true) => vec![Some(p.clone()), None],
+        (Some(p), false) => vec![None, Some(p.clone())],
+        (None, _) => vec![None],
+    };
+
+    let mut last_err = String::new();
+    for route in routes {
+        match request_claude_usage(&token, route.as_deref()).await {
+            Ok(raw) => {
+                return Ok(ClaudeCodeUsageResult {
+                    five_hour: raw.five_hour,
+                    seven_day: raw.seven_day,
+                    seven_day_opus: raw.seven_day_opus,
+                    seven_day_sonnet: raw.seven_day_sonnet,
+                    extra_usage: raw.extra_usage,
+                    via_proxy: route.is_some(),
+                    proxy_url: route,
+                    local_usage: None,
+                });
+            }
+            Err(e) => {
+                // token 过期换线路也无济于事，直接返回
+                if e.contains("OAuth token 已过期") {
+                    return Err(e);
+                }
+                last_err = if last_err.is_empty() {
+                    e
+                } else {
+                    format!("{}；切换线路重试仍失败: {}", last_err, e)
+                };
+            }
+        }
+    }
+    Err(last_err)
+}
+
+// 取窗口重置时间逆推窗口起点；API 未返回重置时间时退化为「当前时间 - 窗口时长」
+fn window_start(
+    window: &Option<ClaudeOauthWindow>,
+    duration: chrono::Duration,
+    now: chrono::DateTime<chrono::Utc>,
+) -> chrono::DateTime<chrono::Utc> {
+    window
+        .as_ref()
+        .and_then(|w| w.resets_at.as_deref())
+        .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+        .map(|t| t.with_timezone(&chrono::Utc) - duration)
+        .unwrap_or(now - duration)
+}
+
+#[tauri::command]
+pub async fn fetch_claude_code_usage() -> Result<ClaudeCodeUsageResult, String> {
+    let mut result = fetch_claude_usage_from_api().await?;
+
+    let now = chrono::Utc::now();
+    let five_hour_start = window_start(&result.five_hour, chrono::Duration::hours(5), now);
+    let seven_day_start = window_start(&result.seven_day, chrono::Duration::days(7), now);
+
+    // 本地日志统计仅作附加展示，失败不影响限额数据
+    result.local_usage = tauri::async_runtime::spawn_blocking(move || {
+        scan_local_claude_usage(five_hour_start, seven_day_start)
     })
+    .await
+    .ok()
+    .and_then(|r| r.ok());
+    Ok(result)
 }
 
 // 获取智谱额度

@@ -60,6 +60,12 @@ export interface ClaudeCodeExtraUsage {
   currency: string | null;
 }
 
+// Claude Code 本地日志用量统计（窗口起点与官方限额窗口对齐）
+export interface ClaudeLocalUsage {
+  fiveHourTokens: number;
+  sevenDayTokens: number;
+}
+
 // Claude Code 用量数据
 export interface ClaudeCodeUsageData {
   fiveHour: ClaudeCodeUsageWindow | null;
@@ -69,6 +75,7 @@ export interface ClaudeCodeUsageData {
   extraUsage: ClaudeCodeExtraUsage | null;
   viaProxy: boolean;
   proxyUrl?: string;
+  localUsage?: ClaudeLocalUsage | null;
 }
 
 // 磁盘使用量数据
