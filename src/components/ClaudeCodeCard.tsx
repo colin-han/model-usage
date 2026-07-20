@@ -6,13 +6,14 @@ interface ClaudeCodeCardProps {
   loading?: boolean;
 }
 
-type WindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet';
+type WindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet' | 'sevenDayFable';
 
 const WINDOW_DURATIONS: Record<WindowKey, number> = {
   fiveHour: 5 * 60 * 60 * 1000,
   sevenDay: 7 * 24 * 60 * 60 * 1000,
   sevenDayOpus: 7 * 24 * 60 * 60 * 1000,
   sevenDaySonnet: 7 * 24 * 60 * 60 * 1000,
+  sevenDayFable: 7 * 24 * 60 * 60 * 1000,
 };
 
 const WINDOW_TITLES: Record<WindowKey, string> = {
@@ -20,6 +21,7 @@ const WINDOW_TITLES: Record<WindowKey, string> = {
   sevenDay: '7 天窗口',
   sevenDayOpus: '7 天 Opus',
   sevenDaySonnet: '7 天 Sonnet',
+  sevenDayFable: '7 天 Fable',
 };
 
 function formatResetTime(iso: string | null): string {
@@ -133,6 +135,7 @@ export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
     { key: 'sevenDay', window: data.sevenDay },
     { key: 'sevenDayOpus', window: data.sevenDayOpus },
     { key: 'sevenDaySonnet', window: data.sevenDaySonnet },
+    { key: 'sevenDayFable', window: data.sevenDayFable },
   ];
   const visible = windows.filter(w => w.window !== null);
 
@@ -169,7 +172,9 @@ export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
                 ? data.localUsage?.fiveHourTokens
                 : key === 'sevenDay'
                   ? data.localUsage?.sevenDayTokens
-                  : undefined
+                  : key === 'sevenDayFable'
+                    ? data.localUsage?.sevenDayFableTokens
+                    : undefined
             }
           />
         ))

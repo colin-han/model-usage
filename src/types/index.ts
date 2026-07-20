@@ -64,6 +64,7 @@ export interface ClaudeCodeExtraUsage {
 export interface ClaudeLocalUsage {
   fiveHourTokens: number;
   sevenDayTokens: number;
+  sevenDayFableTokens: number;
 }
 
 // Claude Code 用量数据
@@ -72,6 +73,7 @@ export interface ClaudeCodeUsageData {
   sevenDay: ClaudeCodeUsageWindow | null;
   sevenDayOpus: ClaudeCodeUsageWindow | null;
   sevenDaySonnet: ClaudeCodeUsageWindow | null;
+  sevenDayFable: ClaudeCodeUsageWindow | null;
   extraUsage: ClaudeCodeExtraUsage | null;
   viaProxy: boolean;
   proxyUrl?: string;
