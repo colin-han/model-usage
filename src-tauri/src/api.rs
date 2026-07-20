@@ -151,6 +151,47 @@ pub struct ClaudeOauthWindow {
     pub resets_at: Option<String>,
 }
 
+// 官方 /api/oauth/usage 新版 limits 数组中的单条限额
+#[derive(Debug, Deserialize)]
+struct ClaudeLimit {
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    percent: Option<f64>,
+    #[serde(default)]
+    resets_at: Option<String>,
+    #[serde(default)]
+    scope: Option<ClaudeLimitScope>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClaudeLimitScope {
+    #[serde(default)]
+    model: Option<ClaudeLimitModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClaudeLimitModel {
+    #[serde(default)]
+    display_name: Option<String>,
+}
+
+// 从官方 limits 数组中按模型 display_name（忽略大小写全等）提取额度窗口
+fn extract_model_window(limits: &[ClaudeLimit], model_name: &str) -> Option<ClaudeOauthWindow> {
+    let needle = model_name.to_lowercase();
+    limits.iter().find_map(|l| {
+        let name = l.scope.as_ref()?.model.as_ref()?.display_name.as_ref()?.to_lowercase();
+        if name == needle {
+            Some(ClaudeOauthWindow {
+                utilization: l.percent.unwrap_or(0.0),
+                resets_at: l.resets_at.clone(),
+            })
+        } else {
+            None
+        }
+    })
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct ClaudeExtraUsage {
     #[serde(default)]
@@ -175,6 +216,8 @@ pub struct ClaudeCodeUsageResult {
     pub seven_day_opus: Option<ClaudeOauthWindow>,
     #[serde(rename = "sevenDaySonnet")]
     pub seven_day_sonnet: Option<ClaudeOauthWindow>,
+    #[serde(rename = "sevenDayFable")]
+    pub seven_day_fable: Option<ClaudeOauthWindow>,
     #[serde(rename = "extraUsage")]
     pub extra_usage: Option<ClaudeExtraUsage>,
     #[serde(rename = "viaProxy")]
@@ -282,6 +325,8 @@ struct ClaudeOauthRaw {
     seven_day_opus: Option<ClaudeOauthWindow>,
     seven_day_sonnet: Option<ClaudeOauthWindow>,
     extra_usage: Option<ClaudeExtraUsage>,
+    #[serde(default)]
+    limits: Option<Vec<ClaudeLimit>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -448,6 +493,10 @@ async fn fetch_claude_usage_from_api() -> Result<ClaudeCodeUsageResult, String> 
                     seven_day: raw.seven_day,
                     seven_day_opus: raw.seven_day_opus,
                     seven_day_sonnet: raw.seven_day_sonnet,
+                    seven_day_fable: raw
+                        .limits
+                        .as_deref()
+                        .and_then(|l| extract_model_window(l, "fable")),
                     extra_usage: raw.extra_usage,
                     via_proxy: route.is_some(),
                     proxy_url: route,
@@ -735,4 +784,28 @@ pub fn get_disk_usage() -> Result<DiskUsageResult, String> {
         available_bytes,
         percentage,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_fable_window_from_limits() {
+        let json = r#"[
+            {"kind":"session","percent":2,"resets_at":"2026-07-20T12:29:59+00:00","scope":null},
+            {"kind":"weekly_scoped","percent":7,"resets_at":"2026-07-26T00:59:59+00:00","scope":{"model":{"id":null,"display_name":"Fable"}}}
+        ]"#;
+        let limits: Vec<ClaudeLimit> = serde_json::from_str(json).unwrap();
+        let w = extract_model_window(&limits, "fable").expect("应能找到 fable 窗口");
+        assert_eq!(w.utilization, 7.0);
+        assert_eq!(w.resets_at.as_deref(), Some("2026-07-26T00:59:59+00:00"));
+    }
+
+    #[test]
+    fn returns_none_when_no_matching_model() {
+        let json = r#"[{"kind":"weekly_scoped","percent":3,"scope":{"model":{"display_name":"Sonnet"}}}]"#;
+        let limits: Vec<ClaudeLimit> = serde_json::from_str(json).unwrap();
+        assert!(extract_model_window(&limits, "fable").is_none());
+    }
 }
