@@ -235,6 +235,12 @@ pub struct ClaudeCodeUsageResult {
 pub struct ClaudeLocalUsage {
     pub five_hour_tokens: u64,
     pub seven_day_tokens: u64,
+    pub seven_day_fable_tokens: u64,
+}
+
+// 判断模型是否属于 fable 系列（兼容将来 fable-5.x / fable-6）
+fn model_is_fable(model: Option<&str>) -> bool {
+    model.map(|m| m.starts_with("claude-fable-")).unwrap_or(false)
 }
 
 // 扫描 ~/.claude/projects/**/*.jsonl，统计两个官方窗口起点之后
@@ -253,6 +259,7 @@ fn scan_local_claude_usage(
     let mut seen_ids: HashSet<String> = HashSet::new();
     let mut five_hour_tokens = 0u64;
     let mut seven_day_tokens = 0u64;
+    let mut seven_day_fable_tokens = 0u64;
 
     let projects = fs::read_dir(&projects_dir)
         .map_err(|e| format!("读取 Claude 日志目录失败 ({}): {}", projects_dir.display(), e))?;
@@ -298,12 +305,16 @@ fn scan_local_claude_usage(
                     }
                 }
                 let Some(usage) = message.get("usage") else { continue };
+                let model = message.get("model").and_then(|m| m.as_str());
                 let tokens: u64 = ["input_tokens", "output_tokens", "cache_creation_input_tokens"]
                     .iter()
                     .map(|k| usage.get(*k).and_then(|x| x.as_u64()).unwrap_or(0))
                     .sum();
                 if ts >= seven_day_start {
                     seven_day_tokens += tokens;
+                    if model_is_fable(model) {
+                        seven_day_fable_tokens += tokens;
+                    }
                 }
                 if ts >= five_hour_start {
                     five_hour_tokens += tokens;
@@ -315,6 +326,7 @@ fn scan_local_claude_usage(
     Ok(ClaudeLocalUsage {
         five_hour_tokens,
         seven_day_tokens,
+        seven_day_fable_tokens,
     })
 }
 
@@ -807,5 +819,14 @@ mod tests {
         let json = r#"[{"kind":"weekly_scoped","percent":3,"scope":{"model":{"display_name":"Sonnet"}}}]"#;
         let limits: Vec<ClaudeLimit> = serde_json::from_str(json).unwrap();
         assert!(extract_model_window(&limits, "fable").is_none());
+    }
+
+    #[test]
+    fn model_is_fable_matches_prefix() {
+        assert!(model_is_fable(Some("claude-fable-5")));
+        assert!(model_is_fable(Some("claude-fable-6")));
+        assert!(!model_is_fable(Some("claude-opus-4-8")));
+        assert!(!model_is_fable(Some("claude-sonnet-5")));
+        assert!(!model_is_fable(None));
     }
 }
