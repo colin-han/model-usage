@@ -155,6 +155,7 @@ pub struct ClaudeOauthWindow {
 #[derive(Debug, Deserialize)]
 struct ClaudeLimit {
     #[serde(default)]
+    #[allow(dead_code)] // 预留字段：官方 limits.kind，暂未消费
     kind: Option<String>,
     #[serde(default)]
     percent: Option<f64>,
