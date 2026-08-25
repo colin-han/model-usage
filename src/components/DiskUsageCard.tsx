@@ -22,7 +22,7 @@ function getUsageColor(percentage: number): string {
 export function DiskUsageCard({ data, error, loading }: DiskUsageCardProps) {
   if (!data) {
     return (
-      <div className="glass-card p-4 mb-4">
+      <div className="glass-card p-4">
         <h2 className="text-lg font-bold text-white/90 mb-2">💾 磁盘使用量</h2>
         <p className={`text-white/50 text-sm ${loading ? 'animate-pulse' : ''}`}>
           {loading ? '加载中...' : error ? `数据获取失败: ${error}` : '暂无数据'}
@@ -34,7 +34,7 @@ export function DiskUsageCard({ data, error, loading }: DiskUsageCardProps) {
   const percentage = Math.max(0, Math.min(100, data.percentage));
 
   return (
-    <div className="glass-card p-4 mb-4">
+    <div className="glass-card p-4">
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-lg font-bold text-white/90">💾 磁盘使用量</h2>
         <span className="text-xs text-white/50">{data.mountPoint}</span>

@@ -48,15 +48,16 @@ function getUsageColor(tokenPercent: number, timePercent?: number): string {
   return 'bg-blue-400';
 }
 
-function getTypeLabel(type: string): string {
-  if (type === 'TOKENS_LIMIT') return 'Token 限额';
-  if (type === 'TIME_LIMIT') return '时长限额';
-  return type;
-}
+// 与 Claude 卡片保持一致的窗口标签
+const WINDOW_TITLES: Record<number, string> = {
+  3: '5 小时',
+  5: '30 天',
+  6: '7 天',
+};
 
 function getLimitLabel(item: ZhipuLimitItem): string {
   if (item.type === 'TIME_LIMIT' && item.unit === 5) return 'MCP每月额度';
-  return `${getTypeLabel(item.type)} · ${item.unitLabel}`;
+  return WINDOW_TITLES[item.unit] || item.unitLabel;
 }
 
 function LimitItem({ item }: { item: ZhipuLimitItem }) {
@@ -106,7 +107,7 @@ function LimitItem({ item }: { item: ZhipuLimitItem }) {
 export function ZhipuCard({ data, error, loading }: ZhipuCardProps) {
   if (!data) {
     return (
-      <div className="glass-card p-4 mb-4">
+      <div className="glass-card p-4">
         <h2 className="text-lg font-bold text-white/90 mb-2">🤖 智谱 AI</h2>
         <p className={`text-white/50 text-sm ${loading ? 'animate-pulse' : ''}`}>
           {loading ? '加载中...' : error ? `数据获取失败: ${error}` : '未配置 API Key'}
@@ -116,7 +117,7 @@ export function ZhipuCard({ data, error, loading }: ZhipuCardProps) {
   }
 
   return (
-    <div className="glass-card p-4 mb-4">
+    <div className="glass-card p-4">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold text-white/90">🤖 智谱 AI</h2>
         {data.level && (

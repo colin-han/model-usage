@@ -17,8 +17,8 @@ const WINDOW_DURATIONS: Record<WindowKey, number> = {
 };
 
 const WINDOW_TITLES: Record<WindowKey, string> = {
-  fiveHour: '5 小时窗口',
-  sevenDay: '7 天窗口',
+  fiveHour: '5 小时',
+  sevenDay: '7 天',
   sevenDayOpus: '7 天 Opus',
   sevenDaySonnet: '7 天 Sonnet',
   sevenDayFable: '7 天 Fable',
@@ -121,8 +121,8 @@ function formatTokens(tokens: number): string {
 export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
   if (!data) {
     return (
-      <div className="glass-card p-4 mb-4">
-        <h2 className="text-lg font-bold text-white/90 mb-2">🤖 Claude Code</h2>
+      <div className="glass-card p-4">
+        <h2 className="text-lg font-bold text-white/90 mb-2">🤖 Claude</h2>
         <p className={`text-white/50 text-sm ${loading ? 'animate-pulse' : ''}`}>
           {loading ? '加载中...' : error ? `数据获取失败: ${error}` : '暂无数据'}
         </p>
@@ -140,20 +140,25 @@ export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
   const visible = windows.filter(w => w.window !== null);
 
   return (
-    <div className="glass-card p-4 mb-4">
+    <div className="glass-card p-4">
       <div className="flex justify-between items-center mb-3">
-        <h2 className="text-lg font-bold text-white/90">🤖 Claude Code</h2>
+        <h2 className="text-lg font-bold text-white/90">🤖 Claude</h2>
         <div className="flex items-center gap-1.5">
           {data.viaProxy && (
             <span
-              className="text-[11px] glass-badge px-2 py-0.5 rounded-full text-amber-200 border border-amber-300/30"
+              className="text-xs glass-badge w-6 h-6 flex items-center justify-center rounded-full text-amber-200 border border-amber-300/30 cursor-default"
               title={data.proxyUrl ? `经由代理: ${data.proxyUrl}` : '经由代理访问'}
             >
-              🛰 代理
+              🛰
             </span>
           )}
           {data.extraUsage?.is_enabled && (
-            <span className="text-xs glass-badge px-2 py-0.5 rounded-full">已启用按量付费</span>
+            <span
+              className="text-xs glass-badge w-6 h-6 flex items-center justify-center rounded-full cursor-default"
+              title="已启用按量付费"
+            >
+              💳
+            </span>
           )}
         </div>
       </div>

@@ -67,26 +67,36 @@ function App() {
           </div>
         )}
 
-        {settings.showClaudeCode && (
-          <ClaudeCodeCard
-            data={data.claudeCode}
-            error={data.claudeCodeError}
-            loading={cardLoading(data.claudeCodeError)}
-          />
+        {/* 大卡片区：Claude / 智谱 / 磁盘，每行两个 */}
+        {(settings.showClaudeCode || settings.showZhipu || settings.showDiskUsage) && (
+          <div className="grid grid-cols-2 gap-4 mb-4 items-start">
+            {settings.showClaudeCode && (
+              <ClaudeCodeCard
+                data={data.claudeCode}
+                error={data.claudeCodeError}
+                loading={cardLoading(data.claudeCodeError)}
+              />
+            )}
+            {settings.showZhipu && (
+              <ZhipuCard
+                data={data.zhipu}
+                error={data.zhipuError}
+                loading={cardLoading(data.zhipuError)}
+              />
+            )}
+            {settings.showDiskUsage && (
+              <DiskUsageCard
+                data={data.diskUsage}
+                error={data.diskUsageError}
+                loading={cardLoading(data.diskUsageError)}
+              />
+            )}
+          </div>
         )}
-        {settings.showZhipu && (
-          <ZhipuCard
-            data={data.zhipu}
-            error={data.zhipuError}
-            loading={cardLoading(data.zhipuError)}
-          />
-        )}
+
+        {/* 小卡片区：每行三个 */}
         {(settings.showDeepseek || settings.showVolcengine) && (
-          <div
-            className={`grid gap-4 mb-4 ${
-              settings.showDeepseek && settings.showVolcengine ? 'grid-cols-2' : 'grid-cols-1'
-            }`}
-          >
+          <div className="grid grid-cols-3 gap-4 items-start">
             {settings.showDeepseek && (
               <DeepSeekCard
                 data={data.deepseek}
@@ -102,13 +112,6 @@ function App() {
               />
             )}
           </div>
-        )}
-        {settings.showDiskUsage && (
-          <DiskUsageCard
-            data={data.diskUsage}
-            error={data.diskUsageError}
-            loading={cardLoading(data.diskUsageError)}
-          />
         )}
         </div>
       </main>

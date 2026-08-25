@@ -467,6 +467,9 @@ async fn request_claude_usage(token: &str, proxy_url: Option<&str>) -> Result<Cl
         if status.as_u16() == 401 {
             return Err("OAuth token 已过期，请在终端运行 claude 重新登录".to_string());
         }
+        if status.as_u16() == 429 {
+            return Err("请求过于频繁 (429)，当前出口 IP 被限流，请稍后重试".to_string());
+        }
         return Err(format!("API 返回 {}: {}", status, body));
     }
 
@@ -519,6 +522,10 @@ async fn fetch_claude_usage_from_api() -> Result<ClaudeCodeUsageResult, String> 
             Err(e) => {
                 // token 过期换线路也无济于事，直接返回
                 if e.contains("OAuth token 已过期") {
+                    return Err(e);
+                }
+                // 429 是账号/出口 IP 被限流，换线路只会再吃一次限流，不回退
+                if e.contains("请求过于频繁 (429)") {
                     return Err(e);
                 }
                 last_err = if last_err.is_empty() {
