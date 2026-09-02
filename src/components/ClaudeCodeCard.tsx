@@ -24,10 +24,11 @@ const WINDOW_TITLES: Record<WindowKey, string> = {
   sevenDayFable: '7 天 Fable',
 };
 
-function formatResetTime(iso: string | null): string {
-  if (!iso) return '';
+// 无法解析重置时间（如 5 小时 session 尚未开始）时返回 null，由调用方决定展示文案
+function formatResetTime(iso: string | null): string | null {
+  if (!iso) return null;
   const target = new Date(iso).getTime();
-  if (Number.isNaN(target)) return '';
+  if (Number.isNaN(target)) return null;
   const date = new Date(target);
   const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 
@@ -64,11 +65,13 @@ function UsageRow({
   window,
   duration,
   localTokens,
+  noResetHint,
 }: {
   title: string;
   window: ClaudeCodeUsageWindow;
   duration: number | null;
   localTokens?: number;
+  noResetHint?: string;
 }) {
   const usagePct = Math.max(0, Math.min(100, window.utilization));
   const timePct =
@@ -76,6 +79,7 @@ function UsageRow({
       ? getTimePercentage(window.resets_at, duration)
       : undefined;
   const hasTimeBar = typeof timePct === 'number';
+  const resetText = formatResetTime(window.resets_at) ?? noResetHint ?? null;
 
   return (
     <div className="mb-3 last:mb-0">
@@ -104,9 +108,7 @@ function UsageRow({
           />
         </div>
       )}
-      {window.resets_at && (
-        <p className="text-xs text-white/50">重置: {formatResetTime(window.resets_at)}</p>
-      )}
+      {resetText && <p className="text-xs text-white/50">{resetText}</p>}
     </div>
   );
 }
@@ -172,6 +174,7 @@ export function ClaudeCodeCard({ data, error, loading }: ClaudeCodeCardProps) {
             title={WINDOW_TITLES[key]}
             window={window!}
             duration={WINDOW_DURATIONS[key]}
+            noResetHint={key === 'fiveHour' ? 'session 还没有开始' : undefined}
             localTokens={
               key === 'fiveHour'
                 ? data.localUsage?.fiveHourTokens
