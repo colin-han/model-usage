@@ -35,6 +35,7 @@ pub fn run() {
       api::fetch_zhipu_quota,
       api::fetch_claude_code_usage,
       api::fetch_volcengine_balance,
+      api::fetch_aliyun_balance,
       api::get_disk_usage,
       api::load_settings,
       api::save_settings,

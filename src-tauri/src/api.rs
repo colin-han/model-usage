@@ -15,6 +15,10 @@ pub struct AppSettings {
     pub volcengine_access_key: String,
     #[serde(rename = "volcengineSecretKey", default)]
     pub volcengine_secret_key: String,
+    #[serde(rename = "aliyunAccessKey", default)]
+    pub aliyun_access_key: String,
+    #[serde(rename = "aliyunSecretKey", default)]
+    pub aliyun_secret_key: String,
     #[serde(rename = "showClaudeCode", default = "default_true")]
     pub show_claude_code: bool,
     #[serde(rename = "showZhipu", default = "default_true")]
@@ -23,6 +27,8 @@ pub struct AppSettings {
     pub show_deepseek: bool,
     #[serde(rename = "showVolcengine", default = "default_true")]
     pub show_volcengine: bool,
+    #[serde(rename = "showAliyun", default = "default_true")]
+    pub show_aliyun: bool,
     #[serde(rename = "showDiskUsage", default = "default_true")]
     pub show_disk_usage: bool,
     #[serde(rename = "refreshIntervalSec", default = "default_refresh_interval")]
@@ -40,10 +46,13 @@ impl Default for AppSettings {
             deepseek_api_key: String::new(),
             volcengine_access_key: String::new(),
             volcengine_secret_key: String::new(),
+            aliyun_access_key: String::new(),
+            aliyun_secret_key: String::new(),
             show_claude_code: true,
             show_zhipu: true,
             show_deepseek: true,
             show_volcengine: true,
+            show_aliyun: true,
             show_disk_usage: true,
             refresh_interval_sec: default_refresh_interval(),
             proxy_url: default_proxy_url(),
@@ -738,6 +747,136 @@ pub async fn fetch_volcengine_balance(
     })
 }
 
+// ===== 阿里云账户余额（BSS OpenAPI QueryAccountBalance，ACS3-HMAC-SHA256 签名） =====
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AliyunBalanceResult {
+    pub available_amount: f64,
+    pub available_cash_amount: f64,
+    pub credit_amount: f64,
+    pub mybank_credit_amount: f64,
+    pub currency: String,
+}
+
+// 阿里云金额字段为带千分位逗号的字符串（如 "1,234.56"），兼容数字格式
+fn aliyun_amount_to_f64(value: Option<&serde_json::Value>) -> f64 {
+    match value {
+        Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+        Some(serde_json::Value::String(s)) => s.replace(',', "").parse().unwrap_or(0.0),
+        _ => 0.0,
+    }
+}
+
+// 阿里云 V3 签名（ACS3-HMAC-SHA256）：无 query、空 body 的 GET 请求。
+// 返回 (payload 哈希, Authorization 头)。
+fn aliyun_v3_authorization(
+    access_key: &str,
+    secret_key: &str,
+    action: &str,
+    version: &str,
+    host: &str,
+    x_acs_date: &str,
+    nonce: &str,
+) -> (String, String) {
+    let payload_hash = sha256_hex(b"");
+    // 参与签名的头按名称字典序排列
+    let headers = [
+        ("host", host),
+        ("x-acs-action", action),
+        ("x-acs-content-sha256", &payload_hash),
+        ("x-acs-date", x_acs_date),
+        ("x-acs-signature-nonce", nonce),
+        ("x-acs-version", version),
+    ];
+    let signed_headers = headers.map(|(k, _)| k).join(";");
+    let canonical_headers: String = headers
+        .iter()
+        .map(|(k, v)| format!("{}:{}\n", k, v))
+        .collect();
+    let canonical_request = format!(
+        "GET\n/\n\n{}\n{}\n{}",
+        canonical_headers, signed_headers, payload_hash
+    );
+    let string_to_sign = format!(
+        "ACS3-HMAC-SHA256\n{}",
+        sha256_hex(canonical_request.as_bytes())
+    );
+    let signature = hex::encode(hmac_sha256(secret_key.as_bytes(), &string_to_sign));
+    let authorization = format!(
+        "ACS3-HMAC-SHA256 Credential={},SignedHeaders={},Signature={}",
+        access_key, signed_headers, signature
+    );
+    (payload_hash, authorization)
+}
+
+fn parse_aliyun_balance(body: &serde_json::Value) -> Result<AliyunBalanceResult, String> {
+    if body.get("Success").and_then(|v| v.as_bool()) != Some(true) {
+        let code = body.get("Code").and_then(|v| v.as_str()).unwrap_or("Unknown");
+        let msg = body.get("Message").and_then(|v| v.as_str()).unwrap_or("");
+        return Err(format!("阿里云 API 错误 ({}): {}", code, msg));
+    }
+    let data = body
+        .get("Data")
+        .ok_or_else(|| "阿里云响应缺少 Data 字段".to_string())?;
+    Ok(AliyunBalanceResult {
+        available_amount: aliyun_amount_to_f64(data.get("AvailableAmount")),
+        available_cash_amount: aliyun_amount_to_f64(data.get("AvailableCashAmount")),
+        credit_amount: aliyun_amount_to_f64(data.get("CreditAmount")),
+        mybank_credit_amount: aliyun_amount_to_f64(data.get("MybankCreditAmount")),
+        currency: data
+            .get("Currency")
+            .and_then(|v| v.as_str())
+            .unwrap_or("CNY")
+            .to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn fetch_aliyun_balance(
+    access_key: String,
+    secret_key: String,
+) -> Result<AliyunBalanceResult, String> {
+    const HOST: &str = "business.aliyuncs.com";
+    const ACTION: &str = "QueryAccountBalance";
+    const VERSION: &str = "2017-12-14";
+
+    let now = chrono::Utc::now();
+    let x_acs_date = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let nonce = format!("{}{}", now.timestamp_nanos_opt().unwrap_or(0), std::process::id());
+
+    let (payload_hash, authorization) = aliyun_v3_authorization(
+        &access_key,
+        &secret_key,
+        ACTION,
+        VERSION,
+        HOST,
+        &x_acs_date,
+        &nonce,
+    );
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("https://{}/", HOST))
+        .header("x-acs-action", ACTION)
+        .header("x-acs-version", VERSION)
+        .header("x-acs-date", &x_acs_date)
+        .header("x-acs-signature-nonce", &nonce)
+        .header("x-acs-content-sha256", &payload_hash)
+        .header("Authorization", authorization)
+        .send()
+        .await
+        .map_err(|e| format!("请求阿里云余额接口失败: {}", e))?;
+
+    let status = response.status();
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析阿里云响应失败 (HTTP {}): {}", status, e))?;
+
+    parse_aliyun_balance(&body)
+}
+
 // ===== 磁盘使用量 =====
 
 #[derive(Debug, Serialize)]
@@ -827,6 +966,72 @@ mod tests {
         let json = r#"[{"kind":"weekly_scoped","percent":3,"scope":{"model":{"display_name":"Sonnet"}}}]"#;
         let limits: Vec<ClaudeLimit> = serde_json::from_str(json).unwrap();
         assert!(extract_model_window(&limits, "fable").is_none());
+    }
+
+    #[test]
+    fn aliyun_v3_authorization_matches_reference() {
+        // 期望值由独立的 Python 实现按阿里云 ACS3-HMAC-SHA256 规范计算得出
+        let (payload_hash, authorization) = aliyun_v3_authorization(
+            "testAccessKeyId",
+            "testSecretKey",
+            "QueryAccountBalance",
+            "2017-12-14",
+            "business.aliyuncs.com",
+            "2026-09-01T00:00:00Z",
+            "abc123nonce",
+        );
+        assert_eq!(
+            payload_hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            authorization,
+            "ACS3-HMAC-SHA256 Credential=testAccessKeyId,SignedHeaders=host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version,Signature=b275a28a43eff05fbab590beea9528126c8c6c1e96c2df4b1f3c14d7dbe00806"
+        );
+    }
+
+    #[test]
+    fn aliyun_amount_parses_comma_separated_string() {
+        use serde_json::json;
+        assert_eq!(aliyun_amount_to_f64(Some(&json!("1,234.56"))), 1234.56);
+        assert_eq!(aliyun_amount_to_f64(Some(&json!("100.00"))), 100.0);
+        assert_eq!(aliyun_amount_to_f64(Some(&json!(42.5))), 42.5);
+        assert_eq!(aliyun_amount_to_f64(None), 0.0);
+    }
+
+    #[test]
+    fn parse_aliyun_balance_extracts_fields() {
+        let body: serde_json::Value = serde_json::from_str(
+            r#"{
+                "Code": "200",
+                "Message": "successful",
+                "Success": true,
+                "Data": {
+                    "AvailableAmount": "1,234.56",
+                    "AvailableCashAmount": "1,000.00",
+                    "CreditAmount": "234.56",
+                    "MybankCreditAmount": "0",
+                    "Currency": "CNY"
+                }
+            }"#,
+        )
+        .unwrap();
+        let result = parse_aliyun_balance(&body).expect("应解析成功");
+        assert_eq!(result.available_amount, 1234.56);
+        assert_eq!(result.available_cash_amount, 1000.0);
+        assert_eq!(result.credit_amount, 234.56);
+        assert_eq!(result.currency, "CNY");
+    }
+
+    #[test]
+    fn parse_aliyun_balance_reports_api_error() {
+        let body: serde_json::Value = serde_json::from_str(
+            r#"{"Code":"InvalidAccessKeyId.NotFound","Message":"Specified access key is not found.","Success":false}"#,
+        )
+        .unwrap();
+        let err = parse_aliyun_balance(&body).expect_err("应返回错误");
+        assert!(err.contains("InvalidAccessKeyId.NotFound"));
+        assert!(err.contains("Specified access key is not found."));
     }
 
     #[test]

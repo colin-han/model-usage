@@ -45,6 +45,15 @@ export interface VolcengineBalanceData {
   arrearsBalance: number;
 }
 
+// 阿里云账户余额（来自 BSS OpenAPI QueryAccountBalance）
+export interface AliyunBalanceData {
+  availableAmount: number;
+  availableCashAmount: number;
+  creditAmount: number;
+  mybankCreditAmount: number;
+  currency: string;
+}
+
 // Claude Code 订阅用量窗口（来自 /api/oauth/usage）
 export interface ClaudeCodeUsageWindow {
   utilization: number;       // 已使用百分比 (0-100)
@@ -95,10 +104,13 @@ export interface AppSettings {
   deepseekApiKey: string;
   volcengineAccessKey: string;
   volcengineSecretKey: string;
+  aliyunAccessKey: string;
+  aliyunSecretKey: string;
   showClaudeCode: boolean;
   showZhipu: boolean;
   showDeepseek: boolean;
   showVolcengine: boolean;
+  showAliyun: boolean;
   showDiskUsage: boolean;
   refreshIntervalSec: number;
   proxyUrl: string;
@@ -110,6 +122,7 @@ export interface UsageData {
   zhipu: ZhipuQuotaData | null;
   deepseek: DeepSeekUsageData | null;
   volcengine: VolcengineBalanceData | null;
+  aliyun: AliyunBalanceData | null;
   claudeCode: ClaudeCodeUsageData | null;
   diskUsage: DiskUsageData | null;
   lastUpdated: string | null;
@@ -117,6 +130,7 @@ export interface UsageData {
   zhipuError: string | null;
   deepseekError: string | null;
   volcengineError: string | null;
+  aliyunError: string | null;
   claudeCodeError: string | null;
   diskUsageError: string | null;
 }

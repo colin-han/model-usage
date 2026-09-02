@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, VolcengineBalanceData, ClaudeCodeUsageData, DiskUsageData } from '../types';
+import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, VolcengineBalanceData, AliyunBalanceData, ClaudeCodeUsageData, DiskUsageData } from '../types';
 
 // 智谱 unit 枚举：3=五小时, 5=月, 6=周
 const UNIT_LABELS: Record<number, string> = {
@@ -51,6 +51,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     zhipu: null,
     deepseek: null,
     volcengine: null,
+    aliyun: null,
     claudeCode: null,
     diskUsage: null,
     lastUpdated: null,
@@ -58,6 +59,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     zhipuError: null,
     deepseekError: null,
     volcengineError: null,
+    aliyunError: null,
     claudeCodeError: null,
     diskUsageError: null,
   });
@@ -77,6 +79,8 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
       let deepseekError: string | null = null;
       let volcengineData: VolcengineBalanceData | null = null;
       let volcengineError: string | null = null;
+      let aliyunData: AliyunBalanceData | null = null;
+      let aliyunError: string | null = null;
       let claudeCodeData: ClaudeCodeUsageData | null = null;
       let claudeCodeError: string | null = null;
       let diskUsageData: DiskUsageData | null = null;
@@ -124,6 +128,24 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         }
       }
 
+      // 获取阿里云账户余额（需 AK/SK 签名，走 Rust 后端）
+      if (settings.showAliyun && settings.aliyunAccessKey && settings.aliyunSecretKey) {
+        try {
+          aliyunData = await invoke<AliyunBalanceData>('fetch_aliyun_balance', {
+            accessKey: settings.aliyunAccessKey,
+            secretKey: settings.aliyunSecretKey,
+          });
+        } catch (err) {
+          if (typeof err === 'string') {
+            aliyunError = err;
+          } else if (err instanceof Error) {
+            aliyunError = err.message;
+          } else {
+            aliyunError = JSON.stringify(err);
+          }
+        }
+      }
+
       // 获取 Claude Code 用量
       if (settings.showClaudeCode) {
         try {
@@ -158,6 +180,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         zhipu: zhipuData,
         deepseek: deepseekData,
         volcengine: volcengineData,
+        aliyun: aliyunData,
         claudeCode: claudeCodeData,
         diskUsage: diskUsageData,
         lastUpdated: new Date().toISOString(),
@@ -165,6 +188,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         zhipuError,
         deepseekError,
         volcengineError,
+        aliyunError,
         claudeCodeError,
         diskUsageError,
       });
@@ -181,10 +205,13 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     settings.deepseekApiKey,
     settings.volcengineAccessKey,
     settings.volcengineSecretKey,
+    settings.aliyunAccessKey,
+    settings.aliyunSecretKey,
     settings.showClaudeCode,
     settings.showZhipu,
     settings.showDeepseek,
     settings.showVolcengine,
+    settings.showAliyun,
     settings.showDiskUsage,
   ]);
 

@@ -56,10 +56,13 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
   const [deepseek, setDeepseek] = useState(initial.deepseekApiKey);
   const [volcAk, setVolcAk] = useState(initial.volcengineAccessKey);
   const [volcSk, setVolcSk] = useState(initial.volcengineSecretKey);
+  const [aliyunAk, setAliyunAk] = useState(initial.aliyunAccessKey);
+  const [aliyunSk, setAliyunSk] = useState(initial.aliyunSecretKey);
   const [showClaudeCode, setShowClaudeCode] = useState(initial.showClaudeCode);
   const [showZhipu, setShowZhipu] = useState(initial.showZhipu);
   const [showDeepseek, setShowDeepseek] = useState(initial.showDeepseek);
   const [showVolcengine, setShowVolcengine] = useState(initial.showVolcengine);
+  const [showAliyun, setShowAliyun] = useState(initial.showAliyun);
   const [showDiskUsage, setShowDiskUsage] = useState(initial.showDiskUsage);
   const [interval, setIntervalSec] = useState(initial.refreshIntervalSec);
   const [proxyUrl, setProxyUrl] = useState(initial.proxyUrl);
@@ -73,10 +76,13 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
       setDeepseek(initial.deepseekApiKey);
       setVolcAk(initial.volcengineAccessKey);
       setVolcSk(initial.volcengineSecretKey);
+      setAliyunAk(initial.aliyunAccessKey);
+      setAliyunSk(initial.aliyunSecretKey);
       setShowClaudeCode(initial.showClaudeCode);
       setShowZhipu(initial.showZhipu);
       setShowDeepseek(initial.showDeepseek);
       setShowVolcengine(initial.showVolcengine);
+      setShowAliyun(initial.showAliyun);
       setShowDiskUsage(initial.showDiskUsage);
       setIntervalSec(initial.refreshIntervalSec);
       setProxyUrl(initial.proxyUrl);
@@ -104,10 +110,13 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
         deepseekApiKey: deepseek.trim(),
         volcengineAccessKey: volcAk.trim(),
         volcengineSecretKey: volcSk.trim(),
+        aliyunAccessKey: aliyunAk.trim(),
+        aliyunSecretKey: aliyunSk.trim(),
         showClaudeCode,
         showZhipu,
         showDeepseek,
         showVolcengine,
+        showAliyun,
         showDiskUsage,
         refreshIntervalSec: interval,
         proxyUrl: proxyUrl.trim(),
@@ -204,6 +213,29 @@ export function SettingsModal({ open, initial, onClose, onSave }: SettingsModalP
                 value={volcSk}
                 onChange={e => setVolcSk(e.target.value)}
                 placeholder="与 Access Key 配套使用"
+                className={inputClass}
+              />
+            </div>
+          </SettingGroup>
+
+          <SettingGroup title="☁️ 阿里云" enabled={showAliyun} onToggle={setShowAliyun}>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">AccessKey ID</label>
+              <input
+                type="password"
+                value={aliyunAk}
+                onChange={e => setAliyunAk(e.target.value)}
+                placeholder="控制台「AccessKey 管理」中创建"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">AccessKey Secret</label>
+              <input
+                type="password"
+                value={aliyunSk}
+                onChange={e => setAliyunSk(e.target.value)}
+                placeholder="与 AccessKey ID 配套使用"
                 className={inputClass}
               />
             </div>

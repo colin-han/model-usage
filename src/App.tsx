@@ -3,6 +3,7 @@ import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { ZhipuCard } from './components/ZhipuCard';
 import { DeepSeekCard } from './components/DeepSeekCard';
 import { VolcengineCard } from './components/VolcengineCard';
+import { AliyunCard } from './components/AliyunCard';
 import { ClaudeCodeCard } from './components/ClaudeCodeCard';
 import { DiskUsageCard } from './components/DiskUsageCard';
 import { TitleBar } from './components/TitleBar';
@@ -67,8 +68,8 @@ function App() {
           </div>
         )}
 
-        {/* 大卡片区：Claude / 智谱 / 磁盘，每行两个 */}
-        {(settings.showClaudeCode || settings.showZhipu || settings.showDiskUsage) && (
+        {/* 中卡片区：Claude / 智谱，每行两个 */}
+        {(settings.showClaudeCode || settings.showZhipu) && (
           <div className="grid grid-cols-2 gap-4 mb-4 items-start">
             {settings.showClaudeCode && (
               <ClaudeCodeCard
@@ -84,18 +85,22 @@ function App() {
                 loading={cardLoading(data.zhipuError)}
               />
             )}
-            {settings.showDiskUsage && (
-              <DiskUsageCard
-                data={data.diskUsage}
-                error={data.diskUsageError}
-                loading={cardLoading(data.diskUsageError)}
-              />
-            )}
+          </div>
+        )}
+
+        {/* 大卡片区：磁盘，独占一行 */}
+        {settings.showDiskUsage && (
+          <div className="grid grid-cols-1 gap-4 mb-4 items-start">
+            <DiskUsageCard
+              data={data.diskUsage}
+              error={data.diskUsageError}
+              loading={cardLoading(data.diskUsageError)}
+            />
           </div>
         )}
 
         {/* 小卡片区：每行三个 */}
-        {(settings.showDeepseek || settings.showVolcengine) && (
+        {(settings.showDeepseek || settings.showVolcengine || settings.showAliyun) && (
           <div className="grid grid-cols-3 gap-4 items-start">
             {settings.showDeepseek && (
               <DeepSeekCard
@@ -109,6 +114,13 @@ function App() {
                 data={data.volcengine}
                 error={data.volcengineError}
                 loading={cardLoading(data.volcengineError)}
+              />
+            )}
+            {settings.showAliyun && (
+              <AliyunCard
+                data={data.aliyun}
+                error={data.aliyunError}
+                loading={cardLoading(data.aliyunError)}
               />
             )}
           </div>
