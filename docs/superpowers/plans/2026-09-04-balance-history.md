@@ -1162,8 +1162,6 @@ export function BalanceHistoryModal({ provider, history, onClose }: BalanceHisto
 }
 ```
 
-注意 `handleMove` 的参数类型使用了 `React.MouseEvent`，需要在文件顶部把 import 改为 `import { useState, type MouseEvent } from 'react';` 并把参数类型写成 `MouseEvent<SVGSVGElement>`（项目 tsconfig 未开启全局 `React` 命名空间时会报错，以 `tsc` 结果为准）。
-
 - [ ] **Step 2: 在 App.tsx 渲染 modal**
 
 `src/App.tsx`：
