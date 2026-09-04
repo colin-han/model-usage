@@ -20,3 +20,6 @@ node_modules
 .env.local
 .claude/
 dist/
+
+# superpowers 工作目录
+.superpowers/
