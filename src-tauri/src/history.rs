@@ -49,6 +49,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), String> {
             updated_at TEXT NOT NULL,
             PRIMARY KEY (provider, day)
         );
+        -- user_version 记录当前表结构版本，后续迁移据此判断是否需要升级
         PRAGMA user_version = 1;",
     )
     .map_err(|e| format!("初始化历史表失败: {}", e))

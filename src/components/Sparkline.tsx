@@ -7,12 +7,16 @@ interface SparklineProps {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 矮柱的白色透明度（最亮） */
+const BAR_ALPHA_MAX = 0.3;
+/** 最高柱的白色透明度（最暗），保证叠在上面的文字可读 */
+const BAR_ALPHA_MIN = 0.1;
 
 function dayIndex(day: string, firstDay: string): number {
   return Math.round((Date.parse(day) - Date.parse(firstDay)) / DAY_MS);
 }
 
-/** 卡片底图：无坐标轴折线 + 淡色填充，充值日画绿色圆点。历史少于 2 点时不渲染。 */
+/** 卡片底图：每日花费柱状图，柱越高颜色越暗；充值日在柱顶画绿色圆点。历史少于 2 行时不渲染。 */
 export function Sparkline({ history, height = 40 }: SparklineProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -32,34 +36,43 @@ export function Sparkline({ history, height = 40 }: SparklineProps) {
 
   const firstDay = history[0].day;
   const span = Math.max(1, dayIndex(history[history.length - 1].day, firstDay));
-  const balances = history.map(h => h.balance);
-  const min = Math.min(...balances);
-  const max = Math.max(...balances);
-  const range = max - min || 1;
-  const padY = 4;
+  const slot = width / (span + 1); // 每天占的横向宽度
+  const barW = Math.max(1, Math.min(6, slot * 0.6));
+  const spends = history.map(h => Math.max(h.spend ?? 0, 0));
+  const maxSpend = Math.max(...spends, 0.01);
+  const padTop = 4;
+  const plotH = height - padTop;
 
-  const points = history.map(h => ({
-    x: (dayIndex(h.day, firstDay) / span) * width,
-    y: padY + (1 - (h.balance - min) / range) * (height - padY * 2),
-    recharge: h.recharge > 0,
-  }));
-  const line = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const area = `0,${height} ${line} ${width},${height}`;
+  const bars = history.map((h, i) => {
+    const ratio = spends[i] / maxSpend;
+    const barH = ratio * plotH;
+    return {
+      day: h.day,
+      x: slot / 2 + (dayIndex(h.day, firstDay) / (span + 1)) * width,
+      barH,
+      top: height - barH,
+      alpha: BAR_ALPHA_MAX - (BAR_ALPHA_MAX - BAR_ALPHA_MIN) * ratio,
+      recharge: h.recharge > 0,
+    };
+  });
 
   return (
     <div ref={ref} className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} className="block">
-          <polygon points={area} fill="rgba(255,255,255,0.10)" />
-          <polyline
-            points={line}
-            fill="none"
-            stroke="rgba(255,255,255,0.55)"
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-          />
-          {points.filter(p => p.recharge).map(p => (
-            <circle key={p.x} cx={p.x} cy={p.y} r={2.5} fill="#34d399" />
+          {bars.filter(b => b.barH > 0).map(b => (
+            <rect
+              key={`bar-${b.day}`}
+              x={b.x - barW / 2}
+              y={b.top}
+              width={barW}
+              height={b.barH}
+              rx={1}
+              fill={`rgba(255,255,255,${b.alpha.toFixed(3)})`}
+            />
+          ))}
+          {bars.filter(b => b.recharge).map(b => (
+            <circle key={`re-${b.day}`} cx={b.x} cy={Math.min(b.top, height - 3)} r={2.5} fill="#34d399" />
           ))}
         </svg>
       )}
