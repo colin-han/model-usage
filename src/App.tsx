@@ -8,6 +8,7 @@ import { ClaudeCodeCard } from './components/ClaudeCodeCard';
 import { DiskUsageCard } from './components/DiskUsageCard';
 import { TitleBar } from './components/TitleBar';
 import { SettingsModal } from './components/SettingsModal';
+import { BalanceHistoryModal } from './components/BalanceHistoryModal';
 import { useUsageData } from './hooks/useUsageData';
 import { useSettings } from './hooks/useSettings';
 import type { BalanceProvider } from './types';
@@ -16,8 +17,7 @@ function App() {
   const { settings, loaded, update } = useSettings();
   const { data, loading, refresh } = useUsageData(settings, loaded);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // openProvider 本 Task 只写入，Task 5 的详情 modal 会读取它
-  const [, setOpenProvider] = useState<BalanceProvider | null>(null);
+  const [openProvider, setOpenProvider] = useState<BalanceProvider | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // 窗口高度跟随内容自适应：监听卡片区域实际高度，变化时调整窗口尺寸
@@ -142,6 +142,12 @@ function App() {
         initial={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={update}
+      />
+
+      <BalanceHistoryModal
+        provider={openProvider}
+        history={openProvider ? data.histories[openProvider] : []}
+        onClose={() => setOpenProvider(null)}
       />
     </div>
   );
