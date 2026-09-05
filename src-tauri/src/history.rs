@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::fs;
@@ -32,8 +33,6 @@ fn validate_provider(provider: &str) -> Result<(), String> {
     }
 }
 
-// Task 2 移除此 allow 注解
-#[allow(dead_code)]
 fn db_path() -> Result<PathBuf, String> {
     let home_dir = std::env::var("HOME").map_err(|_| "无法获取 HOME 目录".to_string())?;
     Ok(PathBuf::from(home_dir).join(".config/model-usage/history.sqlite"))
@@ -55,9 +54,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), String> {
 }
 
 /// 打开磁盘数据库并确保表存在
-// Task 2 移除此 allow 注解
-#[allow(dead_code)]
-fn open_db() -> Result<Connection, String> {
+pub fn open_db() -> Result<Connection, String> {
     let path = db_path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -110,6 +107,78 @@ pub fn record(
     )
     .map_err(|e| format!("写入余额历史失败: {}", e))?;
     Ok(())
+}
+
+/// 返回最近 days 天（含今天）的历史，升序，并附带花费计算。
+/// 会额外读取窗口之前最近的一行作为第一行的基准，但不返回它。
+pub fn history(
+    conn: &Connection,
+    provider: &str,
+    days: u32,
+    today: NaiveDate,
+) -> Result<Vec<BalanceDay>, String> {
+    validate_provider(provider)?;
+    let span = days.max(1) as i64 - 1;
+    let start = (today - chrono::Duration::days(span))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let baseline: Option<(String, f64)> = conn
+        .query_row(
+            "SELECT day, balance FROM balance_daily
+             WHERE provider = ?1 AND day < ?2 ORDER BY day DESC LIMIT 1",
+            params![provider, start],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| format!("查询历史基准失败: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT day, balance, recharge FROM balance_daily
+             WHERE provider = ?1 AND day >= ?2 ORDER BY day ASC",
+        )
+        .map_err(|e| format!("准备历史查询失败: {}", e))?;
+    let rows = stmt
+        .query_map(params![provider, start], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, f64>(2)?))
+        })
+        .map_err(|e| format!("查询余额历史失败: {}", e))?;
+
+    let mut prev = baseline;
+    let mut result = Vec::new();
+    for row in rows {
+        let (day, balance, recharge) = row.map_err(|e| format!("读取历史行失败: {}", e))?;
+        let (spend, since_day) = match &prev {
+            Some((pd, pb)) => (Some(pb + recharge - balance), Some(pd.clone())),
+            None => (None, None),
+        };
+        result.push(BalanceDay { day: day.clone(), balance, recharge, spend, since_day });
+        prev = Some((day, balance));
+    }
+    Ok(result)
+}
+
+/// 记录一次余额并返回最近 30 天历史
+#[tauri::command]
+pub fn record_balance(provider: String, balance: f64) -> Result<Vec<BalanceDay>, String> {
+    let conn = open_db()?;
+    let now = chrono::Local::now();
+    record(
+        &conn,
+        &provider,
+        balance,
+        &now.format("%Y-%m-%d").to_string(),
+        &now.to_rfc3339(),
+    )?;
+    history(&conn, &provider, 30, now.date_naive())
+}
+
+/// 查询最近 days 天历史
+#[tauri::command]
+pub fn get_balance_history(provider: String, days: u32) -> Result<Vec<BalanceDay>, String> {
+    let conn = open_db()?;
+    history(&conn, &provider, days, chrono::Local::now().date_naive())
 }
 
 #[cfg(test)]
@@ -192,5 +261,61 @@ mod tests {
         let conn = mem_db();
         let err = record(&conn, "openai", 1.0, "2026-09-01", "t1").unwrap_err();
         assert!(err.contains("未知的服务商"));
+    }
+
+    fn d(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
+    }
+
+    #[test]
+    fn history_computes_spend_from_previous_row() {
+        let conn = mem_db();
+        record(&conn, "deepseek", 50.0, "2026-09-01", "t").unwrap();
+        record(&conn, "deepseek", 47.5, "2026-09-02", "t").unwrap();
+        record(&conn, "deepseek", 55.2, "2026-09-03", "t").unwrap(); // 充值 10，实际消费 2.3
+        let rows = history(&conn, "deepseek", 30, d("2026-09-03")).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].spend, None);
+        assert_eq!(rows[0].since_day, None);
+        assert!((rows[1].spend.unwrap() - 2.5).abs() < 1e-9);
+        assert_eq!(rows[1].since_day.as_deref(), Some("2026-09-01"));
+        assert_eq!(rows[2].recharge, 10.0);
+        assert!((rows[2].spend.unwrap() - (47.5 + 10.0 - 55.2)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn history_uses_row_before_window_as_baseline() {
+        let conn = mem_db();
+        record(&conn, "aliyun", 100.0, "2026-08-01", "t").unwrap();
+        record(&conn, "aliyun", 90.0, "2026-08-20", "t").unwrap();
+        // 窗口 30 天：08-05 ~ 09-03，08-01 在窗口外但作为基准
+        let rows = history(&conn, "aliyun", 30, d("2026-09-03")).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].day, "2026-08-20");
+        assert!((rows[0].spend.unwrap() - 10.0).abs() < 1e-9);
+        assert_eq!(rows[0].since_day.as_deref(), Some("2026-08-01"));
+    }
+
+    #[test]
+    fn history_excludes_rows_outside_window_and_is_sorted() {
+        let conn = mem_db();
+        record(&conn, "volcengine", 5.0, "2026-07-01", "t").unwrap();
+        record(&conn, "volcengine", 4.0, "2026-09-02", "t").unwrap();
+        record(&conn, "volcengine", 3.0, "2026-09-03", "t").unwrap();
+        let rows = history(&conn, "volcengine", 30, d("2026-09-03")).unwrap();
+        let days: Vec<&str> = rows.iter().map(|r| r.day.as_str()).collect();
+        assert_eq!(days, vec!["2026-09-02", "2026-09-03"]);
+    }
+
+    #[test]
+    fn history_empty_when_no_rows() {
+        let conn = mem_db();
+        assert!(history(&conn, "deepseek", 30, d("2026-09-03")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn history_rejects_unknown_provider() {
+        let conn = mem_db();
+        assert!(history(&conn, "openai", 30, d("2026-09-03")).is_err());
     }
 }

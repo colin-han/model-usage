@@ -40,6 +40,8 @@ pub fn run() {
       api::get_disk_usage,
       api::load_settings,
       api::save_settings,
+      history::record_balance,
+      history::get_balance_history,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
