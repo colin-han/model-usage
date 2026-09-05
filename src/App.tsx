@@ -10,11 +10,14 @@ import { TitleBar } from './components/TitleBar';
 import { SettingsModal } from './components/SettingsModal';
 import { useUsageData } from './hooks/useUsageData';
 import { useSettings } from './hooks/useSettings';
+import type { BalanceProvider } from './types';
 
 function App() {
   const { settings, loaded, update } = useSettings();
   const { data, loading, refresh } = useUsageData(settings, loaded);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // openProvider 本 Task 只写入，Task 5 的详情 modal 会读取它
+  const [, setOpenProvider] = useState<BalanceProvider | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // 窗口高度跟随内容自适应：监听卡片区域实际高度，变化时调整窗口尺寸
@@ -107,6 +110,8 @@ function App() {
                 data={data.deepseek}
                 error={data.deepseekError}
                 loading={cardLoading(data.deepseekError)}
+                history={data.histories.deepseek}
+                onOpen={setOpenProvider}
               />
             )}
             {settings.showVolcengine && (
@@ -114,6 +119,8 @@ function App() {
                 data={data.volcengine}
                 error={data.volcengineError}
                 loading={cardLoading(data.volcengineError)}
+                history={data.histories.volcengine}
+                onOpen={setOpenProvider}
               />
             )}
             {settings.showAliyun && (
@@ -121,6 +128,8 @@ function App() {
                 data={data.aliyun}
                 error={data.aliyunError}
                 loading={cardLoading(data.aliyunError)}
+                history={data.histories.aliyun}
+                onOpen={setOpenProvider}
               />
             )}
           </div>
