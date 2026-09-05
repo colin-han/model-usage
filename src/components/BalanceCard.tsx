@@ -16,10 +16,15 @@ interface BalanceCardProps {
   onOpen: (provider: BalanceProvider) => void;
 }
 
-/** 余额阈值决定整张卡的底色与边框色 */
+/**
+ * 余额阈值决定整张卡的底色与边框色。
+ * .glass-card 的 background/border 简写声明在编译后 CSS 中排在 Tailwind 工具类之后、
+ * 特异性相同，会覆盖预警色，因此这里用 `!` important 变体强制生效；
+ * 正常态无需覆盖，直接沿用 .glass-card 自身的底色与边框，返回空字符串即可。
+ */
 function getCardTone(amount: number): string {
-  if (amount < 2) return 'bg-red-500/20 border-red-500/30';
-  if (amount < 5) return 'bg-yellow-500/20 border-yellow-500/30';
+  if (amount < 2) return '!bg-red-500/20 !border-red-500/30';
+  if (amount < 5) return '!bg-yellow-500/20 !border-yellow-500/30';
   return '';
 }
 
