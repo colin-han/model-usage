@@ -71,7 +71,7 @@ interface BalanceDay {
 
 ### 4.4 注册
 
-`lib.rs` 的 `generate_handler!` 新增 `history::record_balance`、`history::get_balance_history`。`Cargo.toml` 新增 `rusqlite = { version = "0.32", features = ["bundled"] }`。
+`lib.rs` 的 `generate_handler!` 新增 `history::record_balance`、`history::get_balance_history`。`Cargo.toml` 新增 `rusqlite = { version = "0.40", features = ["bundled"] }`。
 
 ## 5. 前端数据流
 
