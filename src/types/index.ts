@@ -117,6 +117,20 @@ export interface AppSettings {
   noProxyDns: string[];
 }
 
+// 余额历史支持的服务商
+export type BalanceProvider = 'deepseek' | 'volcengine' | 'aliyun';
+
+// 余额历史（每天一条，来自 Rust record_balance / get_balance_history）
+export interface BalanceDay {
+  day: string;              // YYYY-MM-DD
+  balance: number;          // 当天最后一次成功余额
+  recharge: number;         // 当天累计充值（已按 10 元向上取整）
+  spend: number | null;     // 前一行余额 + 当天充值 - 当天余额
+  sinceDay: string | null;  // 前一行日期；与 day 不相邻表示覆盖了断档区间
+}
+
+export type BalanceHistories = Record<BalanceProvider, BalanceDay[]>;
+
 // 使用数据
 export interface UsageData {
   zhipu: ZhipuQuotaData | null;
@@ -125,6 +139,7 @@ export interface UsageData {
   aliyun: AliyunBalanceData | null;
   claudeCode: ClaudeCodeUsageData | null;
   diskUsage: DiskUsageData | null;
+  histories: BalanceHistories;
   lastUpdated: string | null;
   error: string | null;
   zhipuError: string | null;

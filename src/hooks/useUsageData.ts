@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, VolcengineBalanceData, AliyunBalanceData, ClaudeCodeUsageData, DiskUsageData } from '../types';
+import type { AppSettings, UsageData, ZhipuQuotaData, DeepSeekUsageData, DeepSeekBalanceData, VolcengineBalanceData, AliyunBalanceData, ClaudeCodeUsageData, DiskUsageData, BalanceDay, BalanceHistories, BalanceProvider } from '../types';
 
 // 智谱 unit 枚举：3=五小时, 5=月, 6=周
 const UNIT_LABELS: Record<number, string> = {
@@ -46,6 +46,18 @@ async function fetchDeepSeekData(apiKey: string): Promise<DeepSeekUsageData> {
   return { balance };
 }
 
+const EMPTY_HISTORIES: BalanceHistories = { deepseek: [], volcengine: [], aliyun: [] };
+
+/** 将本次余额记入 SQLite 并返回最近 30 天历史；失败时记录日志并返回 null，不影响余额展示 */
+async function recordBalance(provider: BalanceProvider, balance: number): Promise<BalanceDay[] | null> {
+  try {
+    return await invoke<BalanceDay[]>('record_balance', { provider, balance });
+  } catch (err) {
+    console.error(`记录 ${provider} 余额历史失败`, err);
+    return null;
+  }
+}
+
 export function useUsageData(settings: AppSettings, enabled: boolean) {
   const [data, setData] = useState<UsageData>({
     zhipu: null,
@@ -54,6 +66,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
     aliyun: null,
     claudeCode: null,
     diskUsage: null,
+    histories: EMPTY_HISTORIES,
     lastUpdated: null,
     error: null,
     zhipuError: null,
@@ -176,13 +189,28 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         }
       }
 
-      setData({
+      // 余额取成功后记入历史；失败保留上一轮历史
+      const deepseekBalance = deepseekData?.balance
+        ? parseFloat(deepseekData.balance.balance_infos[0]?.total_balance || '0')
+        : null;
+      const [deepseekHistory, volcengineHistory, aliyunHistory] = await Promise.all([
+        deepseekBalance !== null ? recordBalance('deepseek', deepseekBalance) : Promise.resolve(null),
+        volcengineData ? recordBalance('volcengine', volcengineData.availableBalance) : Promise.resolve(null),
+        aliyunData ? recordBalance('aliyun', aliyunData.availableAmount) : Promise.resolve(null),
+      ]);
+
+      setData(prev => ({
         zhipu: zhipuData,
         deepseek: deepseekData,
         volcengine: volcengineData,
         aliyun: aliyunData,
         claudeCode: claudeCodeData,
         diskUsage: diskUsageData,
+        histories: {
+          deepseek: deepseekHistory ?? prev.histories.deepseek,
+          volcengine: volcengineHistory ?? prev.histories.volcengine,
+          aliyun: aliyunHistory ?? prev.histories.aliyun,
+        },
         lastUpdated: new Date().toISOString(),
         error: null,
         zhipuError,
@@ -191,7 +219,7 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
         aliyunError,
         claudeCodeError,
         diskUsageError,
-      });
+      }));
     } catch (err) {
       setData(prev => ({
         ...prev,
