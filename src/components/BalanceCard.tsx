@@ -59,7 +59,7 @@ export function BalanceCard({
     >
       <Sparkline history={history} />
       <div className="relative p-4">
-        <h2 className="text-lg font-bold text-white/90">{title}</h2>
+        <div className="text-lg font-bold text-white/90">{title}</div>
         <div className="flex items-baseline gap-2 mt-1">
           <span className="text-lg font-semibold text-white/90">¥{amount.toFixed(2)}</span>
           {note && <span className="text-xs text-red-300">{note}</span>}

@@ -48,7 +48,8 @@ pub fn init_schema(conn: &Connection) -> Result<(), String> {
             recharge   REAL NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL,
             PRIMARY KEY (provider, day)
-        );",
+        );
+        PRAGMA user_version = 1;",
     )
     .map_err(|e| format!("初始化历史表失败: {}", e))
 }
@@ -62,6 +63,9 @@ pub fn open_db() -> Result<Connection, String> {
     }
     let conn = Connection::open(&path)
         .map_err(|e| format!("打开历史数据库失败 ({}): {}", path.display(), e))?;
+    // 设置忙等待超时，避免多个应用实例共享同一个数据库文件时因写锁冲突而直接失败
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| format!("设置数据库忙等待超时失败: {}", e))?;
     init_schema(&conn)?;
     Ok(conn)
 }

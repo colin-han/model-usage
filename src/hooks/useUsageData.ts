@@ -190,9 +190,10 @@ export function useUsageData(settings: AppSettings, enabled: boolean) {
       }
 
       // 余额取成功后记入历史；失败保留上一轮历史
-      const deepseekBalance = deepseekData?.balance
-        ? parseFloat(deepseekData.balance.balance_infos[0]?.total_balance || '0')
-        : null;
+      // 仅在 DeepSeek 返回了可解析的余额时才记录历史，避免把空响应记成 0 元并污染花费/充值计算
+      const rawDeepseekBalance = deepseekData?.balance?.balance_infos[0]?.total_balance;
+      const parsedDeepseekBalance = rawDeepseekBalance !== undefined ? parseFloat(rawDeepseekBalance) : NaN;
+      const deepseekBalance = Number.isFinite(parsedDeepseekBalance) ? parsedDeepseekBalance : null;
       const [deepseekHistory, volcengineHistory, aliyunHistory] = await Promise.all([
         deepseekBalance !== null ? recordBalance('deepseek', deepseekBalance) : Promise.resolve(null),
         volcengineData ? recordBalance('volcengine', volcengineData.availableBalance) : Promise.resolve(null),

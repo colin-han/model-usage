@@ -51,9 +51,12 @@ function BalanceChart({ history }: ChartProps) {
   const slot = PLOT_W / (span + 1); // 每天占的横向宽度
   const xOf = (day: string) => PAD.left + slot / 2 + (dayIndex(day, firstDay) / (span + 1)) * PLOT_W;
 
-  const maxBalance = Math.max(...history.map(h => h.balance), 0.01);
+  // 余额轴使用 lo/hi 区间而非单纯的 max，以正确处理阿里云欠费等负余额场景
+  const balances = history.map(h => h.balance);
+  const loBalance = Math.min(...balances, 0);
+  const hiBalance = Math.max(...balances, loBalance + 0.01);
   const maxSpend = Math.max(...history.map(h => Math.max(h.spend ?? 0, 0)), 0.01);
-  const yBalance = (v: number) => PAD.top + (1 - v / maxBalance) * PLOT_H;
+  const yBalance = (v: number) => PAD.top + (1 - (v - loBalance) / (hiBalance - loBalance)) * PLOT_H;
   const ySpend = (v: number) => PAD.top + (1 - v / maxSpend) * PLOT_H;
 
   const points = history.map(h => ({ ...h, x: xOf(h.day) }));
@@ -89,7 +92,7 @@ function BalanceChart({ history }: ChartProps) {
             <g key={f}>
               <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y} y2={y} stroke="rgba(255,255,255,0.08)" />
               <text x={PAD.left - 6} y={y + 3} fontSize={9} textAnchor="end" fill="rgba(255,255,255,0.5)">
-                {(maxBalance * f).toFixed(0)}
+                {(loBalance + (hiBalance - loBalance) * f).toFixed(0)}
               </text>
               <text x={WIDTH - PAD.right + 6} y={y + 3} fontSize={9} fill="rgba(255,255,255,0.5)">
                 {(maxSpend * f).toFixed(1)}
