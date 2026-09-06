@@ -55,6 +55,12 @@ function App() {
   const cardLoading = (cardError: string | null) =>
     isFirstLoad || (loading && cardError !== null);
 
+  // 按实际可见数量决定列数：大卡一行一个；中卡最多两个、只有一个时铺满整行；小卡最多三个、只有两个时平分空间
+  const mediumCount = [settings.showClaudeCode, settings.showZhipu].filter(Boolean).length;
+  const smallCount = [settings.showDeepseek, settings.showVolcengine, settings.showAliyun].filter(Boolean).length;
+  const mediumCols = mediumCount >= 2 ? 'grid-cols-2' : 'grid-cols-1';
+  const smallCols = smallCount >= 3 ? 'grid-cols-3' : smallCount === 2 ? 'grid-cols-2' : 'grid-cols-1';
+
   return (
     <div className="min-h-screen flex flex-col animated-gradient">
       <TitleBar
@@ -71,9 +77,9 @@ function App() {
           </div>
         )}
 
-        {/* 中卡片区：Claude / 智谱，每行两个 */}
+        {/* 中卡片区：Claude / 智谱，最多一行两个，只有一个时铺满整行 */}
         {(settings.showClaudeCode || settings.showZhipu) && (
-          <div className="grid grid-cols-2 gap-4 mb-4 items-start">
+          <div className={`grid ${mediumCols} gap-4 mb-4 items-start`}>
             {settings.showClaudeCode && (
               <ClaudeCodeCard
                 data={data.claudeCode}
@@ -102,9 +108,9 @@ function App() {
           </div>
         )}
 
-        {/* 小卡片区：每行三个 */}
+        {/* 小卡片区：最多一行三个，只有两个时平分空间 */}
         {(settings.showDeepseek || settings.showVolcengine || settings.showAliyun) && (
-          <div className="grid grid-cols-3 gap-4 items-start">
+          <div className={`grid ${smallCols} gap-4 items-start`}>
             {settings.showDeepseek && (
               <DeepSeekCard
                 data={data.deepseek}
