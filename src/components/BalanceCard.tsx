@@ -28,6 +28,22 @@ function getCardTone(amount: number): string {
   return '';
 }
 
+/** 本地日期 YYYY-MM-DD，与 Rust 端 chrono::Local 生成的 day 格式一致 */
+function localDay(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** 今日花费：今天那一行的 spend；无记录或尚无前一日基准时为 null */
+function getTodaySpend(history: BalanceDay[]): number | null {
+  const today = localDay();
+  const row = history.find(h => h.day === today);
+  if (!row || row.spend === null) return null;
+  return Math.max(row.spend, 0); // 充值按 10 元向上取整可能使 spend 为负，展示时归零
+}
+
 export function BalanceCard({
   title,
   provider,
@@ -39,6 +55,8 @@ export function BalanceCard({
   history,
   onOpen,
 }: BalanceCardProps) {
+  const todaySpend = getTodaySpend(history);
+
   if (amount === null) {
     return (
       <div className="glass-card p-4">
@@ -63,6 +81,9 @@ export function BalanceCard({
         <div className="flex items-baseline gap-2 mt-1">
           <span className="text-lg font-semibold text-white/90">¥{amount.toFixed(2)}</span>
           {note && <span className="text-xs text-red-300">{note}</span>}
+          <span className="ml-auto text-[11px] text-white/55 whitespace-nowrap">
+            今日 {todaySpend === null ? '—' : `¥${todaySpend.toFixed(2)}`}
+          </span>
         </div>
       </div>
     </button>
